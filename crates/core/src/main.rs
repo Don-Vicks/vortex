@@ -1,7 +1,26 @@
 use chrono::Utc;
-use lifecycle::{FailureInfo, FailureType, LifecycleEvent, TxStatus, logger::append_event};
+use lifecycle::{LifecycleEvent, TxStatus, logger::append_event};
+use jito::fetch_tip_stats;
 
 fn main() {
+    println!("Fetching Jito tip stats from devnet...");
+    
+    // Using devnet RPC for testing as requested
+    let devnet_rpc = "https://api.devnet.solana.com";
+    
+    match fetch_tip_stats(devnet_rpc) {
+        Ok(stats) => {
+            println!("Jito Tip Stats (in lamports):");
+            println!("  Min:    {}", stats.min);
+            println!("  Max:    {}", stats.max);
+            println!("  Median: {}", stats.median);
+            println!("  Average:{}", stats.average);
+        }
+        Err(e) => {
+            eprintln!("Error fetching Jito tip stats: {}", e);
+        }
+    }
+
     let event = LifecycleEvent {
         id: uuid::Uuid::new_v4().to_string(),
         bundle_id: "test-bundle-001".to_string(),
@@ -23,6 +42,11 @@ fn main() {
         failure: None,
     };
 
-    append_event("./logs/lifecycle.json", &event).unwrap();
-    println!("Event written successfully");
+    // Ensure logs directory exists
+    std::fs::create_dir_all("./logs").unwrap_or_default();
+
+    match append_event("./logs/lifecycle.json", &event) {
+        Ok(_) => println!("Event written successfully"),
+        Err(e) => eprintln!("Failed to write event: {}", e),
+    }
 }
