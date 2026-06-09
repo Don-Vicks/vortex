@@ -1,6 +1,6 @@
 use chrono::Utc;
 use lifecycle::{LifecycleEvent, TxStatus, logger::append_event};
-use jito::fetch_tip_stats;
+use jito::fetch_tip_stats_from_url;
 
 fn main() {
     println!("Fetching Jito tip stats from devnet...");
@@ -8,13 +8,9 @@ fn main() {
     // Using devnet RPC for testing as requested
     let devnet_rpc = "https://api.devnet.solana.com";
     
-    match fetch_tip_stats(devnet_rpc) {
+    match fetch_tip_stats_from_url(devnet_rpc) {
         Ok(stats) => {
-            println!("Jito Tip Stats (in lamports):");
-            println!("  Min:    {}", stats.min);
-            println!("  Max:    {}", stats.max);
-            println!("  Median: {}", stats.median);
-            println!("  Average:{}", stats.average);
+            println!("{}", stats);
         }
         Err(e) => {
             eprintln!("Error fetching Jito tip stats: {}", e);
