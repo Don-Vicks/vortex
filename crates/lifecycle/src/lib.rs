@@ -13,13 +13,16 @@ pub enum TxStatus {
     Failed,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum FailureType {
     ExpiredBlockhash,
     FeeTooLow,
     ComputeExceeded,
+    InstructionError,
+    AccountInUse,
+    AlreadyProcessed,
+    NodeBehind,
     BundleFailure,
-    LeaderSkipped,
     Unknown,
 }
 
