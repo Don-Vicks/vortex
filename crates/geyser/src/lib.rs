@@ -1,14 +1,27 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+pub mod client;
+pub mod stream;
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotInfo {
+    pub slot: u64,
+    pub parent: u64,
+    pub timestamp: DateTime<Utc>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CommitmentLevel {
+    Processed,
+    Confirmed,
+    Finalized,
+}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TxConfirmation {
+    pub signature: String,
+    pub slot: u64,
+    pub commitment: CommitmentLevel,
+    pub timestamp: DateTime<Utc>,
 }
