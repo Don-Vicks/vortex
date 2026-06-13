@@ -1,4 +1,4 @@
-use lifecycle::{FailureInfo, FailureType, LifecycleEvent};
+use lifecycle::{FailureType, LifecycleEvent};
 
 pub enum RetryStrategy {
     RefreshBlockhashAndRetry,

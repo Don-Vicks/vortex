@@ -1,3 +1,5 @@
 /target
 /logs/
 .env
+BOUNTY_REQUIREMENTS.md
+IMPLEMENTATION_PLAN.md
