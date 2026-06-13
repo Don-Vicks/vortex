@@ -105,11 +105,10 @@ async fn main() -> Result<()> {
     });
 
     // Build agent config
-    let provider = match env::var("AI_PROVIDER")
-        .unwrap_or_default()
-        .to_lowercase()
-        .as_str()
-    {
+    let provider = env::var("AI_PROVIDER")
+        .unwrap_or_else(|_| "anthropic".to_string())
+        .to_lowercase();
+    let provider = match provider.as_str() {
         "openai" => agent::AiProvider::OpenAI,
         "gemini" => agent::AiProvider::Gemini,
         "grok" => agent::AiProvider::Grok,
@@ -123,6 +122,9 @@ async fn main() -> Result<()> {
     });
     let agent_config = agent::AgentConfig { provider, model };
 
+    // Initialize Leader Tracker
+    let leader_tracker = jito::leader::LeaderTracker::new(&rpc_url);
+
     // === Main Loop ===
     tracing::info!("Entering main evaluation loop. Press Ctrl+C to stop.");
 
@@ -134,6 +136,30 @@ async fn main() -> Result<()> {
         }
 
         let live_slot = current_slot.load(Ordering::Relaxed);
+
+        // Phase 1: Detect Jito Leader Window
+        let next_jito_slot = match leader_tracker.get_next_jito_leader_slot(live_slot) {
+            Ok(Some(slot)) => slot,
+            Ok(None) => {
+                tracing::warn!("No Jito leaders found in the next 20 slots. Waiting...");
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                continue;
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch leader schedule: {}", e);
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        if next_jito_slot > live_slot + 5 {
+            // Jito leader is too far away, sleep for a bit to avoid burning RPC limits
+            tracing::debug!("Next Jito leader is at slot {}, sleeping...", next_jito_slot);
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            continue;
+        }
+
+        tracing::info!("Jito leader window detected upcoming at slot: {}", next_jito_slot);
 
         // Fetch tip stats from Jito
         let tip_stats = match jito::tip::fetch_tip_stats(&rpc_url).await {

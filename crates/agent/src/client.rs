@@ -102,7 +102,7 @@ async fn call_gemini(model: &str, prompt: &str) -> Result<String> {
         .json(&json!({
             "generationConfig": {
                 "temperature": 0.0,
-                "maxOutputTokens": 200
+                "maxOutputTokens": 1000
             },
             "systemInstruction": {
                 "parts": [{"text": SYSTEM_PROMPT}]
