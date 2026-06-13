@@ -1,19 +1,26 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::env;
+use tracing::info;
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::tonic::transport::ClientTlsConfig;
 
 pub async fn connect() -> Result<GeyserGrpcClient<impl yellowstone_grpc_client::Interceptor>> {
     let endpoint = env::var("YELLOWSTONE_ENDPOINT")
-        .expect("YELLOWSTONE_ENDPOINT must be set");
+        .context("YELLOWSTONE_ENDPOINT must be set in .env")?;
     let token = env::var("YELLOWSTONE_TOKEN")
-        .expect("YELLOWSTONE_TOKEN must be set");
+        .context("YELLOWSTONE_TOKEN must be set in .env")?;
+
+    info!(endpoint = %endpoint, "Connecting to Yellowstone gRPC...");
 
     let client = GeyserGrpcClient::build_from_shared(endpoint)?
         .x_token(Some(token))?
         .tls_config(ClientTlsConfig::new())?
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(10))
         .connect()
-        .await?;
+        .await
+        .context("Failed to connect to Yellowstone gRPC endpoint")?;
 
+    info!("Yellowstone gRPC connected successfully");
     Ok(client)
 }

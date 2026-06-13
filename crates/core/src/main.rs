@@ -1,48 +1,243 @@
+use anyhow::Result;
 use chrono::Utc;
-use lifecycle::{LifecycleEvent, TxStatus, logger::append_event};
-use jito::fetch_tip_stats_from_url;
+use dotenv::dotenv;
+use lifecycle::{
+    logger::{append_event, read_events},
+    LifecycleEvent, TxStatus,
+};
+use std::env;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use uuid::Uuid;
 
-fn main() {
-    println!("Fetching Jito tip stats from devnet...");
-    
-    // Using devnet RPC for testing as requested
-    let devnet_rpc = "https://api.devnet.solana.com";
-    
-    match fetch_tip_stats_from_url(devnet_rpc) {
-        Ok(stats) => {
-            println!("{}", stats);
-        }
-        Err(e) => {
-            eprintln!("Error fetching Jito tip stats: {}", e);
-        }
+#[tokio::main]
+async fn main() -> Result<()> {
+    dotenv().ok();
+    tracing_subscriber::fmt::init();
+
+    let rpc_url = env::var("SOLANA_RPC_URL")
+        .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+    let log_path = env::var("LOG_FILE_PATH")
+        .unwrap_or_else(|_| "./logs/lifecycle.json".to_string());
+
+    // Auto-create log directory
+    if let Some(parent) = std::path::Path::new(&log_path).parent() {
+        std::fs::create_dir_all(parent)?;
     }
 
-    let event = LifecycleEvent {
-        id: uuid::Uuid::new_v4().to_string(),
-        bundle_id: "test-bundle-001".to_string(),
-        signature: "test-signature-abc".to_string(),
-        tip_lamports: 5000,
-        tip_reasoning: "Test entry — network looked calm".to_string(),
-        submitted_at: Utc::now(),
-        submitted_slot: 280000000,
-        processed_at: None,
-        processed_slot: None,
-        confirmed_at: None,
-        confirmed_slot: None,
-        finalized_at: None,
-        finalized_slot: None,
-        latency_to_processed_ms: None,
-        latency_to_confirmed_ms: None,
-        latency_to_finalized_ms: None,
-        status: TxStatus::Pending,
-        failure: None,
+    // Shared slot tracker — written by geyser/rpc task, read by main loop
+    let current_slot = Arc::new(AtomicU64::new(0));
+
+    // Set up slot streaming channel
+    let (slot_tx, mut slot_rx) = tokio::sync::mpsc::channel::<geyser::SlotInfo>(100);
+
+    // Spawn slot updater: reads from channel, writes to AtomicU64
+    let slot_writer = Arc::clone(&current_slot);
+    tokio::spawn(async move {
+        while let Some(slot_info) = slot_rx.recv().await {
+            slot_writer.store(slot_info.slot, Ordering::Relaxed);
+        }
+    });
+
+    // Try Yellowstone gRPC first, fall back to RPC polling
+    let slot_tx_clone = slot_tx.clone();
+    let rpc_url_clone = rpc_url.clone();
+
+    tokio::spawn(async move {
+        let geyser_failed = match geyser::client::connect().await {
+            Ok(client) => {
+                tracing::info!("Yellowstone gRPC connected — using live geyser stream");
+                match geyser::stream::subscribe_slots(client, slot_tx_clone.clone()).await {
+                    Ok(()) => false,
+                    Err(e) => {
+                        tracing::warn!("Geyser stream terminated: {}. Falling back to RPC polling.", e);
+                        true
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Yellowstone gRPC unavailable: {}. Falling back to RPC polling.", e);
+                true
+            }
+        };
+
+        if geyser_failed {
+            if let Err(e) = geyser::rpc_fallback::poll_slots(
+                rpc_url_clone,
+                slot_tx_clone,
+                std::time::Duration::from_millis(400),
+            )
+            .await
+            {
+                tracing::error!("RPC slot polling also terminated: {}", e);
+            }
+        }
+    });
+
+    // Wait for first slot with a generous timeout
+    tracing::info!("Waiting for first slot update (up to 15s)...");
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    loop {
+        if current_slot.load(Ordering::Relaxed) > 0 {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            tracing::warn!("Slot timeout — proceeding with slot 0. Tip decisions may be degraded.");
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let first_slot = current_slot.load(Ordering::Relaxed);
+    tracing::info!(slot = first_slot, "Slot tracking active");
+
+    // Set up graceful shutdown
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_notify = Arc::new(tokio::sync::Notify::new());
+    let flag_clone = Arc::clone(&shutdown_flag);
+    let notify_clone = Arc::clone(&shutdown_notify);
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for Ctrl+C");
+        tracing::info!("Shutdown signal received. Finishing current cycle...");
+        flag_clone.store(true, Ordering::Relaxed);
+        notify_clone.notify_one();
+    });
+
+    // Build agent config
+    let provider = match env::var("AI_PROVIDER")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "openai" => agent::AiProvider::OpenAI,
+        "gemini" => agent::AiProvider::Gemini,
+        "grok" => agent::AiProvider::Grok,
+        _ => agent::AiProvider::Anthropic,
     };
+    let model = env::var("AI_MODEL").unwrap_or_else(|_| match provider {
+        agent::AiProvider::Anthropic => "claude-3-sonnet-20240229".to_string(),
+        agent::AiProvider::OpenAI => "gpt-4-turbo-preview".to_string(),
+        agent::AiProvider::Gemini => "gemini-2.0-flash".to_string(),
+        agent::AiProvider::Grok => "grok-1".to_string(),
+    });
+    let agent_config = agent::AgentConfig { provider, model };
 
-    // Ensure logs directory exists
-    std::fs::create_dir_all("./logs").unwrap_or_default();
+    // === Main Loop ===
+    tracing::info!("Entering main evaluation loop. Press Ctrl+C to stop.");
 
-    match append_event("./logs/lifecycle.json", &event) {
-        Ok(_) => println!("Event written successfully"),
-        Err(e) => eprintln!("Failed to write event: {}", e),
+    loop {
+        // Check for shutdown
+        if shutdown_flag.load(Ordering::Relaxed) {
+            tracing::info!("Shutting down gracefully.");
+            break;
+        }
+
+        let live_slot = current_slot.load(Ordering::Relaxed);
+
+        // Fetch tip stats from Jito
+        let tip_stats = match jito::tip::fetch_tip_stats(&rpc_url).await {
+            Ok(stats) => stats,
+            Err(e) => {
+                tracing::error!("Failed to fetch tip stats: {}. Retrying in 5s...", e);
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                continue;
+            }
+        };
+        tracing::info!(
+            min = tip_stats.min,
+            median = tip_stats.median,
+            avg = tip_stats.average,
+            max = tip_stats.max,
+            "Tip floor stats"
+        );
+
+        // Read recent events for failure rate
+        let recent_events = read_events(&log_path).unwrap_or_default();
+        let recent_10: Vec<_> = recent_events.iter().rev().take(10).collect();
+        let failure_count = recent_10
+            .iter()
+            .filter(|e| matches!(e.status, TxStatus::Failed))
+            .count();
+        let failure_rate = if recent_10.is_empty() {
+            0.0
+        } else {
+            (failure_count as f64 / recent_10.len() as f64) * 100.0
+        };
+        let time_since_last_success = recent_events
+            .iter()
+            .rev()
+            .find(|e| matches!(e.status, TxStatus::Finalized))
+            .map(|e| (Utc::now() - e.submitted_at).num_seconds().max(0) as u64)
+            .unwrap_or(0);
+
+        // Build network state with LIVE slot
+        let network_state = agent::NetworkState {
+            current_slot: live_slot,
+            tip_min: tip_stats.min,
+            tip_max: tip_stats.max,
+            tip_median: tip_stats.median,
+            tip_average: tip_stats.average,
+            recent_failure_rate: failure_rate,
+            time_since_last_success_secs: time_since_last_success,
+        };
+
+        // Get agent tip decision
+        let tip_decision =
+            match agent::decisions::decide_tip(&agent_config, &network_state).await {
+                Ok(decision) => {
+                    tracing::info!(
+                        lamports = decision.recommended_lamports,
+                        confidence = %decision.confidence,
+                        reasoning = %decision.reasoning,
+                        "Agent tip decision"
+                    );
+                    decision
+                }
+                Err(e) => {
+                    tracing::warn!("Agent failed: {}. Using fallback.", e);
+                    agent::decisions::fallback_tip(tip_stats.median)
+                }
+            };
+
+        // Create and log lifecycle event
+        let event = LifecycleEvent {
+            id: Uuid::new_v4().to_string(),
+            bundle_id: format!("bundle-{}", Uuid::new_v4()),
+            signature: format!("sig-{}", Uuid::new_v4()),
+            tip_lamports: tip_decision.recommended_lamports,
+            tip_reasoning: tip_decision.reasoning,
+            submitted_at: Utc::now(),
+            submitted_slot: live_slot,
+            processed_at: None,
+            processed_slot: None,
+            confirmed_at: None,
+            confirmed_slot: None,
+            finalized_at: None,
+            finalized_slot: None,
+            latency_to_processed_ms: None,
+            latency_to_confirmed_ms: None,
+            latency_to_finalized_ms: None,
+            status: TxStatus::Pending,
+            failure: None,
+        };
+
+        if let Err(e) = append_event(&log_path, &event) {
+            tracing::error!("Failed to log event: {}", e);
+        } else {
+            tracing::info!(id = %event.id, slot = live_slot, "Event logged");
+        }
+
+        // Wait before next cycle (or until shutdown)
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {},
+            _ = shutdown_notify.notified() => {
+                tracing::info!("Shutting down gracefully.");
+                break;
+            }
+        }
     }
+
+    tracing::info!("Solana TX Stack stopped.");
+    Ok(())
 }
