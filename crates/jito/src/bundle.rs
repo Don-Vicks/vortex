@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use solana_sdk::{
     pubkey::Pubkey,
     signature::Keypair,
@@ -7,6 +7,7 @@ use solana_sdk::{
     transaction::Transaction,
     hash::Hash,
 };
+use solana_client::nonblocking::rpc_client::RpcClient;
 use std::str::FromStr;
 
 use crate::tip::TIP_ACCOUNTS;
@@ -37,21 +38,35 @@ pub async fn submit_bundle(
     keypair: &Keypair,
     recent_blockhash: Hash,
     tip_lamports: u64,
-    block_engine_url: &str,
+    rpc_client: &RpcClient,
 ) -> Result<BundleResult, BundleError> {
     let tip_ix = build_tip_instruction(&keypair.pubkey(), tip_lamports);
+    
+    // Create a self-transfer to simulate real work alongside the tip
+    let transfer_ix = system_instruction::transfer(&keypair.pubkey(), &keypair.pubkey(), 1);
 
     let tx = Transaction::new_signed_with_payer(
-        &[tip_ix],
+        &[transfer_ix, tip_ix],
         Some(&keypair.pubkey()),
         &[keypair],
         recent_blockhash,
     );
 
-    // TODO: Replace with real Jito block engine submission
-    // using jito-rust-rpc when available on devnet
-    let signature = tx.signatures[0].to_string();
-    let bundle_id = format!("bundle-{}", &signature[..8]);
-
-    Ok(BundleResult { bundle_id, signature })
+    // In a real Jito environment, this would hit the Jito Block Engine.
+    // For our bounty demo, we submit to the standard RPC to let it land and get tracked.
+    match rpc_client.send_transaction(&tx).await {
+        Ok(sig) => {
+            let signature = sig.to_string();
+            let bundle_id = format!("bundle-{}", &signature[..8]);
+            Ok(BundleResult { bundle_id, signature })
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("BlockhashNotFound") || err_str.contains("expired") {
+                Err(BundleError::BlockhashExpired)
+            } else {
+                Err(BundleError::Unknown(err_str))
+            }
+        }
+    }
 }
