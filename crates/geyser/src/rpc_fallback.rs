@@ -1,4 +1,4 @@
-use crate::SlotInfo;
+use crate::{GeyserEvent, SlotInfo};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use tokio::sync::mpsc;
@@ -8,7 +8,7 @@ use tracing::{error, info, warn};
 /// Use this as a fallback when Yellowstone gRPC is unavailable.
 pub async fn poll_slots(
     rpc_url: String,
-    sender: mpsc::Sender<SlotInfo>,
+    sender: mpsc::Sender<GeyserEvent>,
     interval: std::time::Duration,
 ) -> Result<()> {
     info!(rpc_url = %rpc_url, interval_ms = interval.as_millis(), "Starting RPC slot polling fallback");
@@ -27,7 +27,7 @@ pub async fn poll_slots(
                     };
                     last_slot = slot;
 
-                    if sender.send(slot_info).await.is_err() {
+                    if sender.send(GeyserEvent::Slot(slot_info)).await.is_err() {
                         warn!("Slot receiver dropped, stopping RPC poller");
                         return Ok(());
                     }

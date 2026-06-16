@@ -9,6 +9,9 @@ use std::env;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
+use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_sdk::signature::read_keypair_file;
+use solana_sdk::signer::Signer;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,26 +31,42 @@ async fn main() -> Result<()> {
     // Shared slot tracker — written by geyser/rpc task, read by main loop
     let current_slot = Arc::new(AtomicU64::new(0));
 
-    // Set up slot streaming channel
-    let (slot_tx, mut slot_rx) = tokio::sync::mpsc::channel::<geyser::SlotInfo>(100);
+    // Set up Geyser event streaming channel
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<geyser::GeyserEvent>(100);
 
-    // Spawn slot updater: reads from channel, writes to AtomicU64
+    // Spawn event updater: reads from channel, writes to AtomicU64 and processes Tx confirmations
     let slot_writer = Arc::clone(&current_slot);
     tokio::spawn(async move {
-        while let Some(slot_info) = slot_rx.recv().await {
-            slot_writer.store(slot_info.slot, Ordering::Relaxed);
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                geyser::GeyserEvent::Slot(slot_info) => {
+                    slot_writer.store(slot_info.slot, Ordering::Relaxed);
+                }
+                geyser::GeyserEvent::Tx(tx_conf) => {
+                    tracing::info!(
+                        signature = tx_conf.signature,
+                        slot = tx_conf.slot,
+                        commitment = ?tx_conf.commitment,
+                        "Transaction Stream Event Received"
+                    );
+                    // In Phase 4, we will append this exact timestamp to the lifecycle log to calculate processing latency.
+                }
+            }
         }
     });
 
     // Try Yellowstone gRPC first, fall back to RPC polling
-    let slot_tx_clone = slot_tx.clone();
+    let event_tx_clone = event_tx.clone();
     let rpc_url_clone = rpc_url.clone();
+    
+    // For Phase 2, we fetch the sender's pubkey so Geyser can filter our transactions
+    let wallet_pubkey = env::var("SENDER_PUBKEY").ok();
 
     tokio::spawn(async move {
         let geyser_failed = match geyser::client::connect().await {
             Ok(client) => {
                 tracing::info!("Yellowstone gRPC connected — using live geyser stream");
-                match geyser::stream::subscribe_slots(client, slot_tx_clone.clone()).await {
+                match geyser::stream::subscribe_slots(client, event_tx_clone.clone(), wallet_pubkey).await {
                     Ok(()) => false,
                     Err(e) => {
                         tracing::warn!("Geyser stream terminated: {}. Falling back to RPC polling.", e);
@@ -64,7 +83,7 @@ async fn main() -> Result<()> {
         if geyser_failed {
             if let Err(e) = geyser::rpc_fallback::poll_slots(
                 rpc_url_clone,
-                slot_tx_clone,
+                event_tx_clone,
                 std::time::Duration::from_millis(400),
             )
             .await
@@ -121,6 +140,12 @@ async fn main() -> Result<()> {
         agent::AiProvider::Grok => "grok-1".to_string(),
     });
     let agent_config = agent::AgentConfig { provider, model };
+
+    // Initialize RPC Client and Keypair
+    let rpc_client = RpcClient::new(rpc_url.clone());
+    let keypair_path = env::var("WALLET_KEYPAIR_PATH").unwrap_or_else(|_| "./keypair.json".to_string());
+    let keypair = read_keypair_file(&keypair_path).expect("Failed to read wallet keypair. Make sure keypair.json exists.");
+    let mut iteration_count = 0;
 
     // Initialize Leader Tracker
     let leader_tracker = jito::leader::LeaderTracker::new(&rpc_url);
@@ -226,11 +251,52 @@ async fn main() -> Result<()> {
                 }
             };
 
+        // Fetch real blockhash and submit bundle
+        iteration_count += 1;
+        let mut recent_blockhash = rpc_client.get_latest_blockhash().await.unwrap_or_default();
+        
+        // Phase 3: Failure Injection Loop
+        if iteration_count % 3 == 0 {
+            tracing::warn!("FAILURE INJECTION: Intentionally using a dummy blockhash for bundle submission!");
+            recent_blockhash = solana_sdk::hash::Hash::default();
+        }
+
+        let bundle_result = jito::bundle::submit_bundle(
+            &keypair,
+            recent_blockhash,
+            tip_decision.recommended_lamports,
+            &rpc_client
+        ).await;
+
+        let (bundle_id, signature, status, failure) = match bundle_result {
+            Ok(res) => (
+                res.bundle_id,
+                res.signature,
+                TxStatus::Pending,
+                None
+            ),
+            Err(e) => {
+                let error_type = failures::classifier::classify(&format!("{:?}", e));
+                let fail_info = lifecycle::FailureInfo {
+                    error_type,
+                    raw_error: format!("{:?}", e),
+                    retry_count: 0,
+                    resolved: false,
+                };
+                (
+                    format!("failed-bundle-{}", &Uuid::new_v4().to_string()[..8]),
+                    format!("failed-sig-{}", &Uuid::new_v4().to_string()[..8]),
+                    TxStatus::Failed,
+                    Some(fail_info)
+                )
+            }
+        };
+
         // Create and log lifecycle event
         let event = LifecycleEvent {
             id: Uuid::new_v4().to_string(),
-            bundle_id: format!("bundle-{}", Uuid::new_v4()),
-            signature: format!("sig-{}", Uuid::new_v4()),
+            bundle_id,
+            signature,
             tip_lamports: tip_decision.recommended_lamports,
             tip_reasoning: tip_decision.reasoning,
             submitted_at: Utc::now(),
@@ -244,8 +310,8 @@ async fn main() -> Result<()> {
             latency_to_processed_ms: None,
             latency_to_confirmed_ms: None,
             latency_to_finalized_ms: None,
-            status: TxStatus::Pending,
-            failure: None,
+            status,
+            failure,
         };
 
         if let Err(e) = append_event(&log_path, &event) {

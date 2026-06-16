@@ -1,4 +1,4 @@
-use crate::SlotInfo;
+use crate::{GeyserEvent, SlotInfo, TxConfirmation, CommitmentLevel as InternalCommitment};
 use anyhow::Result;
 use chrono::Utc;
 use std::collections::HashMap;
@@ -13,15 +13,16 @@ const INITIAL_BACKOFF_MS: u64 = 500;
 
 pub async fn subscribe_slots(
     mut client: GeyserGrpcClient<impl yellowstone_grpc_client::Interceptor>,
-    sender: mpsc::Sender<SlotInfo>,
+    sender: mpsc::Sender<GeyserEvent>,
+    wallet_pubkey: Option<String>,
 ) -> Result<()> {
     let mut reconnect_attempts: u32 = 0;
 
     loop {
-        match try_subscribe(&mut client, &sender).await {
+        match try_subscribe(&mut client, &sender, &wallet_pubkey).await {
             Ok(()) => {
                 // Stream ended cleanly (server closed connection)
-                warn!("Geyser slot stream ended. Reconnecting...");
+                warn!("Geyser stream ended. Reconnecting...");
                 reconnect_attempts += 1;
             }
             Err(e) => {
@@ -51,46 +52,81 @@ pub async fn subscribe_slots(
 
 async fn try_subscribe(
     client: &mut GeyserGrpcClient<impl yellowstone_grpc_client::Interceptor>,
-    sender: &mpsc::Sender<SlotInfo>,
+    sender: &mpsc::Sender<GeyserEvent>,
+    wallet_pubkey: &Option<String>,
 ) -> Result<()> {
     let mut slots_map = HashMap::new();
     slots_map.insert(
         "client".to_string(),
         SubscribeRequestFilterSlots {
-            // Filter to Confirmed commitment — avoids noisy Processed updates
+            // Filter to Confirmed commitment — avoids noisy Processed updates if true.
+            // But we want ALL commitment levels (Processed, Confirmed, Rooted) to track lifecycle!
             filter_by_commitment: Some(true),
         },
     );
 
+    let mut transactions_map = HashMap::new();
+    if let Some(pubkey) = wallet_pubkey {
+        transactions_map.insert(
+            "client_txs".to_string(),
+            SubscribeRequestFilterTransactions {
+                vote: Some(false),
+                failed: Some(false),
+                signature: None,
+                account_include: vec![pubkey.clone()],
+                account_exclude: vec![],
+                account_required: vec![],
+            },
+        );
+    }
+
     let request = SubscribeRequest {
         slots: slots_map,
-        // Subscribe at Confirmed commitment level
-        commitment: Some(CommitmentLevel::Confirmed as i32),
+        transactions: transactions_map,
+        // We set the stream to 'Processed' so we receive updates as soon as the validator sees them.
+        // We will receive slot updates for Processed, Confirmed, and Rooted states.
+        commitment: Some(CommitmentLevel::Processed as i32),
         ..Default::default()
     };
 
     let (_, mut stream) = client.subscribe_with_request(Some(request)).await?;
-    info!("Geyser slot subscription active (Confirmed commitment)");
+    info!("Geyser subscription active (Processed commitment, tx_tracking={})", wallet_pubkey.is_some());
 
     while let Some(message) = stream.next().await {
         match message {
             Ok(msg) => {
-                if let Some(subscribe_update::UpdateOneof::Slot(slot)) = msg.update_oneof {
-                    let slot_info = SlotInfo {
-                        slot: slot.slot,
-                        parent: slot.parent.unwrap_or(0),
-                        timestamp: Utc::now(),
-                    };
-                    info!(slot = slot_info.slot, parent = slot_info.parent, "New confirmed slot");
-
-                    if sender.send(slot_info).await.is_err() {
-                        warn!("Slot receiver dropped, stopping subscription");
-                        return Ok(());
+                if let Some(update_oneof) = msg.update_oneof {
+                    match update_oneof {
+                        subscribe_update::UpdateOneof::Slot(slot) => {
+                            let slot_info = SlotInfo {
+                                slot: slot.slot,
+                                parent: slot.parent.unwrap_or(0),
+                                timestamp: Utc::now(),
+                            };
+                            if sender.send(GeyserEvent::Slot(slot_info)).await.is_err() {
+                                warn!("Receiver dropped, stopping subscription");
+                                return Ok(());
+                            }
+                        }
+                        subscribe_update::UpdateOneof::Transaction(tx) => {
+                            let sig = bs58::encode(&tx.transaction.as_ref().unwrap().signature).into_string();
+                            let tx_conf = TxConfirmation {
+                                signature: sig,
+                                slot: tx.slot,
+                                commitment: InternalCommitment::Processed, // Emitted at processed level
+                                timestamp: Utc::now(),
+                            };
+                            if sender.send(GeyserEvent::Tx(tx_conf)).await.is_err() {
+                                warn!("Receiver dropped, stopping subscription");
+                                return Ok(());
+                            }
+                        }
+                        _ => {} // Ignore other updates like blocks/ping
                     }
                 }
             }
             Err(e) => {
-                error!(error = %e, "gRPC stream error (auth failure? rate limit?)");
+                error!(error = %e, "gRPC stream error");
                 return Err(e.into());
             }
         }

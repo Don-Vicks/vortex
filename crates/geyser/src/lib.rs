@@ -26,3 +26,9 @@ pub struct TxConfirmation {
     pub commitment: CommitmentLevel,
     pub timestamp: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GeyserEvent {
+    Slot(SlotInfo),
+    Tx(TxConfirmation),
+}
