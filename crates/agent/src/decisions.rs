@@ -1,6 +1,7 @@
 use crate::{NetworkState, TipDecision, AgentConfig};
 use crate::client::call_agent;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 /// Hard ceiling: never tip more than 5M lamports (0.005 SOL) under normal conditions.
 const HARD_CEILING_LAMPORTS: u64 = 5_000_000;
@@ -88,6 +89,34 @@ pub fn fallback_tip(median: u64) -> TipDecision {
         reasoning: "Agent unavailable. Using clamped tip median as fallback.".to_string(),
         confidence: "low".to_string(),
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FailureAnalysis {
+    pub cause: String,
+    pub action: String,
+    pub suggested_tip_multiplier: f64,
+}
+
+pub async fn analyze_failure(config: &AgentConfig, error: &str) -> Result<FailureAnalysis> {
+    let prompt = format!(
+        r#"A Solana transaction failed with the following error:
+"{}"
+
+Analyze the failure and decide the best recovery action.
+Respond with ONLY this JSON object, nothing else:
+{{
+  "cause": "<brief explanation>",
+  "action": "<must be one of: refresh_blockhash, increase_tip, wait, give_up>",
+  "suggested_tip_multiplier": <float, e.g. 1.0 or 1.2>
+}}"#,
+        error
+    );
+
+    let response = call_agent(config, &prompt).await?;
+    let analysis: FailureAnalysis = serde_json::from_str(&response)
+        .map_err(|e| anyhow::anyhow!("Failed to parse agent response '{}': {}", response, e))?;
+    Ok(analysis)
 }
 
 #[cfg(test)]

@@ -293,7 +293,7 @@ async fn main() -> Result<()> {
         };
 
         // Create and log lifecycle event
-        let event = LifecycleEvent {
+        let mut event = LifecycleEvent {
             id: Uuid::new_v4().to_string(),
             bundle_id,
             signature,
@@ -310,14 +310,67 @@ async fn main() -> Result<()> {
             latency_to_processed_ms: None,
             latency_to_confirmed_ms: None,
             latency_to_finalized_ms: None,
-            status,
-            failure,
+            status: status.clone(),
+            failure: failure.clone(),
         };
 
         if let Err(e) = append_event(&log_path, &event) {
             tracing::error!("Failed to log event: {}", e);
         } else {
             tracing::info!(id = %event.id, slot = live_slot, "Event logged");
+        }
+
+        // Autonomous retry loop (Phase 3)
+        if matches!(status, TxStatus::Failed) {
+            if let Some(f) = failure {
+                tracing::warn!("Agent analyzing failure autonomously: {}", f.raw_error);
+                if let Ok(analysis) = agent::decisions::analyze_failure(&agent_config, &f.raw_error).await {
+                    tracing::info!(cause = %analysis.cause, action = %analysis.action, "Agent failure analysis complete");
+                    
+                    if analysis.action == "refresh_blockhash" || analysis.action == "increase_tip" {
+                        let new_tip = (event.tip_lamports as f64 * analysis.suggested_tip_multiplier) as u64;
+                        let fresh_blockhash = rpc_client.get_latest_blockhash().await.unwrap_or_default();
+                        
+                        tracing::info!("Agent autonomously resubmitting with fresh blockhash and tip {}", new_tip);
+                        let retry_res = jito::bundle::submit_bundle(
+                            &keypair,
+                            fresh_blockhash,
+                            new_tip,
+                            &rpc_client
+                        ).await;
+                        
+                        let mut retry_event = event.clone();
+                        retry_event.id = Uuid::new_v4().to_string();
+                        retry_event.submitted_at = Utc::now();
+                        retry_event.tip_lamports = new_tip;
+                        retry_event.tip_reasoning = format!("Autonomous recovery. Action: {}, Cause: {}", analysis.action, analysis.cause);
+                        
+                        match retry_res {
+                            Ok(res) => {
+                                retry_event.bundle_id = res.bundle_id;
+                                retry_event.signature = res.signature;
+                                retry_event.status = TxStatus::Pending;
+                                retry_event.failure = None;
+                                tracing::info!("Autonomous retry successful!");
+                            }
+                            Err(e) => {
+                                retry_event.status = TxStatus::Failed;
+                                let error_type = failures::classifier::classify(&format!("{:?}", e));
+                                retry_event.failure = Some(lifecycle::FailureInfo {
+                                    error_type,
+                                    raw_error: format!("{:?}", e),
+                                    retry_count: 1,
+                                    resolved: false,
+                                });
+                                tracing::error!("Autonomous retry failed again: {:?}", e);
+                            }
+                        }
+                        if let Err(e) = append_event(&log_path, &retry_event) {
+                            tracing::error!("Failed to log retry event: {}", e);
+                        }
+                    }
+                }
+            }
         }
 
         // Wait before next cycle (or until shutdown)
