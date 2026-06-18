@@ -67,6 +67,48 @@ pub async fn submit_bundle(
             } else {
                 Err(BundleError::Unknown(err_str))
             }
+    }
+}
+
+/// The Kora Gasless Feepayer Relayer logic.
+/// Accepts a set of instructions from an external SDK, injects the relayer as the `fee_payer`,
+/// appends the dynamic Jito tip, and submits it.
+pub async fn submit_gasless_bundle(
+    relayer_keypair: &Keypair,
+    mut instructions: Vec<solana_sdk::instruction::Instruction>,
+    recent_blockhash: Hash,
+    tip_lamports: u64,
+    rpc_client: &RpcClient,
+) -> Result<BundleResult, BundleError> {
+    // 1. Inject the Jito Tip instruction paid for by the Relayer Treasury
+    let tip_ix = build_tip_instruction(&relayer_keypair.pubkey(), tip_lamports);
+    instructions.push(tip_ix);
+
+    // 2. Construct the transaction, explicitly setting the relayer as the fee payer
+    let mut tx = Transaction::new_with_payer(
+        &instructions,
+        Some(&relayer_keypair.pubkey()),
+    );
+
+    // 3. The relayer signs the transaction to authorize fee payment.
+    // (Note: The user's partial signature would normally be attached here before submission)
+    tx.partial_sign(&[relayer_keypair], recent_blockhash);
+
+    // 4. Submit to Jito (or RPC for demo)
+    match rpc_client.send_transaction(&tx).await {
+        Ok(sig) => {
+            let signature = sig.to_string();
+            let bundle_id = format!("bundle-{}", &signature[..8]);
+            Ok(BundleResult { bundle_id, signature })
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("BlockhashNotFound") || err_str.contains("expired") {
+                Err(BundleError::BlockhashExpired)
+            } else {
+                Err(BundleError::Unknown(err_str))
+            }
         }
     }
 }
+
