@@ -76,12 +76,21 @@ export function Dashboard() {
     <div className="max-w-6xl mx-auto space-y-8 py-8 px-4 sm:px-6 lg:px-8">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pb-6 border-b border-slate-200">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">
-            Solana TX Stack
-          </h1>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              Vortex Transaction Stack
+            </h1>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 shadow-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Engine Live</span>
+            </div>
+          </div>
           <p className="text-slate-500 flex items-center gap-2 text-sm">
-            <Activity className="w-4 h-4" />
-            Live transaction lifecycle monitor & Agent visualizer
+            <Activity className="w-4 h-4 text-blue-500" />
+            Live network conditions & AI autonomous routing
           </p>
         </div>
         
