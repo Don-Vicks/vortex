@@ -1,5 +1,5 @@
-use crate::{NetworkState, TipDecision, AgentConfig};
-use crate::client::call_agent;
+use crate::agent::{NetworkState, TipDecision, AgentConfig};
+use crate::agent::client::call_agent;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -48,7 +48,7 @@ Respond with ONLY this JSON object, nothing else:
 
 pub async fn decide_tip(config: &AgentConfig, state: &NetworkState) -> Result<TipDecision> {
     let prompt = build_prompt(state);
-    let response = call_agent(config, &prompt).await?;
+    let response: String = call_agent(config, &prompt).await?;
 
     let mut decision: TipDecision = serde_json::from_str(&response)
         .map_err(|e| anyhow::anyhow!("Failed to parse agent response '{}': {}", response, e))?;
@@ -113,7 +113,7 @@ Respond with ONLY this JSON object, nothing else:
         error
     );
 
-    let response = call_agent(config, &prompt).await?;
+    let response: String = call_agent(config, &prompt).await?;
     let analysis: FailureAnalysis = serde_json::from_str(&response)
         .map_err(|e| anyhow::anyhow!("Failed to parse agent response '{}': {}", response, e))?;
     Ok(analysis)

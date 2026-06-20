@@ -1,4 +1,4 @@
-use crate::{FailureInfo, LifecycleEvent, TxStatus};
+use crate::lifecycle::{FailureInfo, LifecycleEvent, TxStatus};
 use chrono::Utc;
 
 pub fn mark_processed(event: &mut LifecycleEvent, slot: u64) {
@@ -6,7 +6,7 @@ pub fn mark_processed(event: &mut LifecycleEvent, slot: u64) {
     event.processed_at = Some(now);
     event.processed_slot = Some(slot);
     event.latency_to_processed_ms = Some(
-        (now - event.submitted_at).num_milliseconds()
+        (now.signed_duration_since(event.submitted_at)).num_milliseconds()
     );
     event.status = TxStatus::Processed;
 }
@@ -16,7 +16,7 @@ pub fn mark_confirmed(event: &mut LifecycleEvent, slot: u64) {
     event.confirmed_at = Some(now);
     event.confirmed_slot = Some(slot);
     event.latency_to_confirmed_ms = Some(
-        (now - event.submitted_at).num_milliseconds()
+        (now.signed_duration_since(event.submitted_at)).num_milliseconds()
     );
     event.status = TxStatus::Confirmed;
 }
@@ -26,7 +26,7 @@ pub fn mark_finalized(event: &mut LifecycleEvent, slot: u64) {
     event.finalized_at = Some(now);
     event.finalized_slot = Some(slot);
     event.latency_to_finalized_ms = Some(
-        (now - event.submitted_at).num_milliseconds()
+        (now.signed_duration_since(event.submitted_at)).num_milliseconds()
     );
     event.status = TxStatus::Finalized;
 }

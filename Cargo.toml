@@ -1,11 +1,7 @@
 [workspace]
 members = [
     "crates/core",
-    "crates/geyser",
-    "crates/jito",
-    "crates/lifecycle",
-    "crates/agent",
-    "crates/failures",
+    "crates/vortex",
 ]
 resolver = "2"
 

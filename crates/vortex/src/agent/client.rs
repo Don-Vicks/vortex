@@ -1,4 +1,4 @@
-use crate::{AiProvider, AgentConfig};
+use crate::agent::{AiProvider, AgentConfig};
 use anyhow::Result;
 use reqwest::Client;
 use serde_json::{json, Value};

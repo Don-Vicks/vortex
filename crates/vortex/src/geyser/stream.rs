@@ -1,4 +1,4 @@
-use crate::{GeyserEvent, SlotInfo, TxConfirmation, CommitmentLevel as InternalCommitment};
+use crate::geyser::{GeyserEvent, SlotInfo, TxConfirmation, CommitmentLevel as InternalCommitment};
 use anyhow::Result;
 use chrono::Utc;
 use std::collections::HashMap;

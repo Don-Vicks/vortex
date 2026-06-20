@@ -1,4 +1,4 @@
-use crate::{GeyserEvent, SlotInfo};
+use crate::geyser::{GeyserEvent, SlotInfo};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use tokio::sync::mpsc;

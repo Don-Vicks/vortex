@@ -1,4 +1,4 @@
-use lifecycle::FailureType;
+use crate::lifecycle::FailureType;
 
 pub fn classify(raw_error: &str) -> FailureType {
     let error = raw_error.to_lowercase();

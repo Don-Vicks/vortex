@@ -1,0 +1,11 @@
+Day 13 of 23:
+
+Decided to step away from the backend for a bit today and give our dashboard some much-needed visual polish. 🖥️✨
+
+I completely rebranded the UI to the "Vortex Transaction Stack" and added a slick blue-to-indigo gradient to the header. But the biggest update was wiring up a pulsing "Engine Live" visualizer. 
+
+It sounds simple, but seeing that green indicator actively pulse while the dashboard streams live network conditions and AI routing decisions in real time makes the whole application feel incredibly dynamic and alive. It's really starting to look like a proper production interface rather than just a backend monitor. 🟢
+
+Back to the rust code tomorrow!
+
+#Rust #Solana #BuildInPublic #Web3 #React

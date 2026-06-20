@@ -10,7 +10,7 @@ use solana_sdk::{
 use solana_client::nonblocking::rpc_client::RpcClient;
 use std::str::FromStr;
 
-use crate::tip::TIP_ACCOUNTS;
+use crate::jito::tip::TIP_ACCOUNTS;
 
 #[derive(Debug)]
 pub enum BundleError {
@@ -67,6 +67,7 @@ pub async fn submit_bundle(
             } else {
                 Err(BundleError::Unknown(err_str))
             }
+        }
     }
 }
 

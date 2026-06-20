@@ -1,4 +1,4 @@
-use crate::LifecycleEvent;
+use crate::lifecycle::LifecycleEvent;
 use anyhow::Result;
 use std::fs;
 use std::path::Path;

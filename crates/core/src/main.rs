@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use dotenv::dotenv;
-use lifecycle::{
+use vortex::lifecycle::{
     logger::{append_event, read_events},
     LifecycleEvent, TxStatus,
 };
@@ -32,17 +32,17 @@ async fn main() -> Result<()> {
     let current_slot = Arc::new(AtomicU64::new(0));
 
     // Set up Geyser event streaming channel
-    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<geyser::GeyserEvent>(100);
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<vortex::geyser::GeyserEvent>(100);
 
     // Spawn event updater: reads from channel, writes to AtomicU64 and processes Tx confirmations
     let slot_writer = Arc::clone(&current_slot);
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
-                geyser::GeyserEvent::Slot(slot_info) => {
+                vortex::geyser::GeyserEvent::Slot(slot_info) => {
                     slot_writer.store(slot_info.slot, Ordering::Relaxed);
                 }
-                geyser::GeyserEvent::Tx(tx_conf) => {
+                vortex::geyser::GeyserEvent::Tx(tx_conf) => {
                     tracing::info!(
                         signature = tx_conf.signature,
                         slot = tx_conf.slot,
@@ -63,10 +63,10 @@ async fn main() -> Result<()> {
     let wallet_pubkey = env::var("SENDER_PUBKEY").ok();
 
     tokio::spawn(async move {
-        let geyser_failed = match geyser::client::connect().await {
+        let geyser_failed = match vortex::geyser::client::connect().await {
             Ok(client) => {
                 tracing::info!("Yellowstone gRPC connected — using live geyser stream");
-                match geyser::stream::subscribe_slots(client, event_tx_clone.clone(), wallet_pubkey).await {
+                match vortex::geyser::stream::subscribe_slots(client, event_tx_clone.clone(), wallet_pubkey).await {
                     Ok(()) => false,
                     Err(e) => {
                         tracing::warn!("Geyser stream terminated: {}. Falling back to RPC polling.", e);
@@ -81,7 +81,7 @@ async fn main() -> Result<()> {
         };
 
         if geyser_failed {
-            if let Err(e) = geyser::rpc_fallback::poll_slots(
+            if let Err(e) = vortex::geyser::rpc_fallback::poll_slots(
                 rpc_url_clone,
                 event_tx_clone,
                 std::time::Duration::from_millis(400),
@@ -128,18 +128,18 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "anthropic".to_string())
         .to_lowercase();
     let provider = match provider.as_str() {
-        "openai" => agent::AiProvider::OpenAI,
-        "gemini" => agent::AiProvider::Gemini,
-        "grok" => agent::AiProvider::Grok,
-        _ => agent::AiProvider::Anthropic,
+        "openai" => vortex::agent::AiProvider::OpenAI,
+        "gemini" => vortex::agent::AiProvider::Gemini,
+        "grok" => vortex::agent::AiProvider::Grok,
+        _ => vortex::agent::AiProvider::Anthropic,
     };
     let model = env::var("AI_MODEL").unwrap_or_else(|_| match provider {
-        agent::AiProvider::Anthropic => "claude-3-sonnet-20240229".to_string(),
-        agent::AiProvider::OpenAI => "gpt-4-turbo-preview".to_string(),
-        agent::AiProvider::Gemini => "gemini-2.0-flash".to_string(),
-        agent::AiProvider::Grok => "grok-1".to_string(),
+        vortex::agent::AiProvider::Anthropic => "claude-3-sonnet-20240229".to_string(),
+        vortex::agent::AiProvider::OpenAI => "gpt-4-turbo-preview".to_string(),
+        vortex::agent::AiProvider::Gemini => "gemini-2.0-flash".to_string(),
+        vortex::agent::AiProvider::Grok => "grok-1".to_string(),
     });
-    let agent_config = agent::AgentConfig { provider, model };
+    let agent_config = vortex::agent::AgentConfig { provider, model };
 
     // Initialize RPC Client and Keypair
     let rpc_client = RpcClient::new(rpc_url.clone());
@@ -148,7 +148,7 @@ async fn main() -> Result<()> {
     let mut iteration_count = 0;
 
     // Initialize Leader Tracker
-    let leader_tracker = jito::leader::LeaderTracker::new(&rpc_url);
+    let leader_tracker = vortex::jito::leader::LeaderTracker::new(&rpc_url);
 
     // === Main Loop ===
     tracing::info!("Entering main evaluation loop. Press Ctrl+C to stop.");
@@ -187,7 +187,7 @@ async fn main() -> Result<()> {
         tracing::info!("Jito leader window detected upcoming at slot: {}", next_jito_slot);
 
         // Fetch tip stats from Jito
-        let tip_stats = match jito::tip::fetch_tip_stats(&rpc_url).await {
+        let tip_stats = match vortex::jito::tip::fetch_tip_stats(&rpc_url).await {
             Ok(stats) => stats,
             Err(e) => {
                 tracing::error!("Failed to fetch tip stats: {}. Retrying in 5s...", e);
@@ -223,7 +223,7 @@ async fn main() -> Result<()> {
             .unwrap_or(0);
 
         // Build network state with LIVE slot
-        let network_state = agent::NetworkState {
+        let network_state = vortex::agent::NetworkState {
             current_slot: live_slot,
             tip_min: tip_stats.min,
             tip_max: tip_stats.max,
@@ -235,7 +235,7 @@ async fn main() -> Result<()> {
 
         // Get agent tip decision
         let tip_decision =
-            match agent::decisions::decide_tip(&agent_config, &network_state).await {
+            match vortex::agent::decisions::decide_tip(&agent_config, &network_state).await {
                 Ok(decision) => {
                     tracing::info!(
                         lamports = decision.recommended_lamports,
@@ -247,7 +247,7 @@ async fn main() -> Result<()> {
                 }
                 Err(e) => {
                     tracing::warn!("Agent failed: {}. Using fallback.", e);
-                    agent::decisions::fallback_tip(tip_stats.median)
+                    vortex::agent::decisions::fallback_tip(tip_stats.median)
                 }
             };
 
@@ -261,7 +261,7 @@ async fn main() -> Result<()> {
             recent_blockhash = solana_sdk::hash::Hash::default();
         }
 
-        let bundle_result = jito::bundle::submit_bundle(
+        let bundle_result = vortex::jito::bundle::submit_bundle(
             &keypair,
             recent_blockhash,
             tip_decision.recommended_lamports,
@@ -276,8 +276,8 @@ async fn main() -> Result<()> {
                 None
             ),
             Err(e) => {
-                let error_type = failures::classifier::classify(&format!("{:?}", e));
-                let fail_info = lifecycle::FailureInfo {
+                let error_type = vortex::failures::classifier::classify(&format!("{:?}", e));
+                let fail_info = vortex::lifecycle::FailureInfo {
                     error_type,
                     raw_error: format!("{:?}", e),
                     retry_count: 0,
@@ -324,7 +324,7 @@ async fn main() -> Result<()> {
         if matches!(status, TxStatus::Failed) {
             if let Some(f) = failure {
                 tracing::warn!("Agent analyzing failure autonomously: {}", f.raw_error);
-                if let Ok(analysis) = agent::decisions::analyze_failure(&agent_config, &f.raw_error).await {
+                if let Ok(analysis) = vortex::agent::decisions::analyze_failure(&agent_config, &f.raw_error).await {
                     tracing::info!(cause = %analysis.cause, action = %analysis.action, "Agent failure analysis complete");
                     
                     if analysis.action == "refresh_blockhash" || analysis.action == "increase_tip" {
@@ -332,7 +332,7 @@ async fn main() -> Result<()> {
                         let fresh_blockhash = rpc_client.get_latest_blockhash().await.unwrap_or_default();
                         
                         tracing::info!("Agent autonomously resubmitting with fresh blockhash and tip {}", new_tip);
-                        let retry_res = jito::bundle::submit_bundle(
+                        let retry_res = vortex::jito::bundle::submit_bundle(
                             &keypair,
                             fresh_blockhash,
                             new_tip,
@@ -355,8 +355,8 @@ async fn main() -> Result<()> {
                             }
                             Err(e) => {
                                 retry_event.status = TxStatus::Failed;
-                                let error_type = failures::classifier::classify(&format!("{:?}", e));
-                                retry_event.failure = Some(lifecycle::FailureInfo {
+                                let error_type = vortex::failures::classifier::classify(&format!("{:?}", e));
+                                retry_event.failure = Some(vortex::lifecycle::FailureInfo {
                                     error_type,
                                     raw_error: format!("{:?}", e),
                                     retry_count: 1,
