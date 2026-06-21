@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Activity, Clock, Zap, AlertTriangle, CheckCircle2, MoreHorizontal } from 'lucide-react';
 import { useLifecycleLogs } from '../hooks/useLifecycleLogs';
 import type { LifecycleEvent } from '../types/lifecycle';
@@ -69,22 +69,29 @@ function EventRow({ event }: { event: LifecycleEvent }) {
 function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
   const [isSwapping, setIsSwapping] = useState(false);
   const [successSig, setSuccessSig] = useState<string | null>(null);
-  const startEventId = useRef<string | null>(null);
 
-  const handleSwap = () => {
+  const handleSwap = async () => {
     setIsSwapping(true);
     setSuccessSig(null);
-    startEventId.current = latestEvent?.id || null;
-  };
-
-  useEffect(() => {
-    if (isSwapping && latestEvent && latestEvent.id !== startEventId.current) {
-      if (latestEvent.status === 'Confirmed' || latestEvent.status === 'Finalized') {
-        setIsSwapping(false);
-        setSuccessSig(latestEvent.signature);
+    try {
+      const response = await fetch('http://localhost:3000/api/relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'swap', amount_in: 100 }),
+      });
+      const data = await response.json();
+      if (data.success && data.signature) {
+        setSuccessSig(data.signature);
+      } else {
+        alert("Failed to relay transaction: " + data.error);
       }
+    } catch (e) {
+      console.error(e);
+      alert("Error reaching relayer API");
+    } finally {
+      setIsSwapping(false);
     }
-  }, [latestEvent, isSwapping]);
+  };
 
   return (
     <div className="glass-panel p-6 mb-8 border-indigo-100 bg-gradient-to-br from-indigo-50/50 to-white">
