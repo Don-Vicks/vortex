@@ -8,6 +8,7 @@ use vortex::lifecycle::{
 use std::env;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::str::FromStr;
 use uuid::Uuid;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::signature::read_keypair_file;
@@ -142,7 +143,7 @@ async fn main() -> Result<()> {
     let agent_config = vortex::agent::AgentConfig { provider, model };
 
     // Initialize RPC Client and Keypair
-    let rpc_client = RpcClient::new(rpc_url.clone());
+    let rpc_client = std::sync::Arc::new(RpcClient::new(rpc_url.clone()));
     let keypair_path = env::var("WALLET_KEYPAIR_PATH").unwrap_or_else(|_| "./keypair.json".to_string());
     let keypair = read_keypair_file(&keypair_path).expect("Failed to read wallet keypair. Make sure keypair.json exists.");
     let mut iteration_count = 0;
@@ -269,12 +270,31 @@ async fn main() -> Result<()> {
         ).await;
 
         let (bundle_id, signature, status, failure) = match bundle_result {
-            Ok(res) => (
-                res.bundle_id,
-                res.signature,
-                TxStatus::Pending,
-                None
-            ),
+            Ok(res) => {
+                // Since Geyser is disabled on Devnet, we manually poll the RPC to track success!
+                let sig_str = res.signature.clone();
+                let client = rpc_client.clone();
+                tokio::spawn(async move {
+                    tracing::info!("Transaction sent! Waiting for confirmation: {}", sig_str);
+                    if let Ok(sig) = solana_sdk::signature::Signature::from_str(&sig_str) {
+                        for _ in 0..15 {
+                            if let Ok(true) = client.confirm_transaction(&sig).await {
+                                tracing::info!("🎉 SUCCESS! Transaction confirmed on Devnet: https://explorer.solana.com/tx/{}?cluster=devnet", sig_str);
+                                return;
+                            }
+                            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                        }
+                        tracing::warn!("Transaction {} might have been dropped.", sig_str);
+                    }
+                });
+
+                (
+                    res.bundle_id,
+                    res.signature,
+                    TxStatus::Pending,
+                    None
+                )
+            },
             Err(e) => {
                 let error_type = vortex::failures::classifier::classify(&format!("{:?}", e));
                 let fail_info = vortex::lifecycle::FailureInfo {

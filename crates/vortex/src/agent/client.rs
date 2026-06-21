@@ -44,7 +44,7 @@ async fn call_anthropic(model: &str, prompt: &str) -> Result<String> {
         .header("content-type", "application/json")
         .json(&json!({
             "model": model,
-            "max_tokens": 200,
+            "max_tokens": 1000,
             "temperature": 0.0,
             "system": SYSTEM_PROMPT,
             "messages": [{"role": "user", "content": prompt}]
@@ -71,7 +71,7 @@ async fn call_openai(model: &str, prompt: &str) -> Result<String> {
         .json(&json!({
             "model": model,
             "temperature": 0.0,
-            "max_tokens": 200,
+            "max_tokens": 1000,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
@@ -133,7 +133,7 @@ async fn call_grok(model: &str, prompt: &str) -> Result<String> {
         .json(&json!({
             "model": model,
             "temperature": 0.0,
-            "max_tokens": 200,
+            "max_tokens": 1000,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}

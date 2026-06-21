@@ -42,8 +42,9 @@ pub async fn submit_bundle(
 ) -> Result<BundleResult, BundleError> {
     let tip_ix = build_tip_instruction(&keypair.pubkey(), tip_lamports);
     
-    // Create a self-transfer to simulate real work alongside the tip
-    let transfer_ix = system_instruction::transfer(&keypair.pubkey(), &keypair.pubkey(), 1);
+    // Create a dummy transfer to simulate real work alongside the tip
+    let recipient = keypair.pubkey(); // Send to self to avoid rent-exemption errors
+    let transfer_ix = system_instruction::transfer(&keypair.pubkey(), &recipient, 1);
 
     let tx = Transaction::new_signed_with_payer(
         &[transfer_ix, tip_ix],

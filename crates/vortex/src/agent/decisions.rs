@@ -33,7 +33,7 @@ Constraints (HARD — violating any constraint invalidates your output):
 - Only increase tip proportionally to failure rate.
 
 Respond with ONLY this JSON object, nothing else:
-{{"recommended_lamports": <integer>, "reasoning": "<one sentence>", "confidence": "high|medium|low"}}"#,
+{{"recommended_lamports": <integer>, "reasoning": "<very short, max 10 words>", "confidence": "high|medium|low"}}"#,
         slot = state.current_slot,
         since_success = state.time_since_last_success_secs,
         tip_min = state.tip_min,
@@ -103,11 +103,13 @@ pub async fn analyze_failure(config: &AgentConfig, error: &str) -> Result<Failur
         r#"A Solana transaction failed with the following error:
 "{}"
 
-Analyze the failure and decide the best recovery action.
+Analyze the failure and decide the best recovery action. 
+CRITICAL RULE: If the error contains "Attempt to debit an account but found no record of a prior credit", it means the wallet is completely empty (0 SOL) and cannot pay fees. The cause must mention "Wallet is empty (0 SOL)" and the action MUST be 'abort_insufficient_funds'.
+
 Respond with ONLY this JSON object, nothing else:
 {{
   "cause": "<brief explanation>",
-  "action": "<must be one of: refresh_blockhash, increase_tip, wait, give_up>",
+  "action": "<must be one of: refresh_blockhash, increase_tip, wait, abort_insufficient_funds, give_up>",
   "suggested_tip_multiplier": <float, e.g. 1.0 or 1.2>
 }}"#,
         error
