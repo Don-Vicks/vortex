@@ -4349,6 +4349,7 @@ name = "solana-vortex"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "bincode",
  "bs58 0.5.1",
  "chrono",
  "reqwest",

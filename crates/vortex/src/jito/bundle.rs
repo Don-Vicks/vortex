@@ -53,22 +53,53 @@ pub async fn submit_bundle(
         recent_blockhash,
     );
 
-    // In a real Jito environment, this would hit the Jito Block Engine.
-    // For our bounty demo, we submit to the standard RPC to let it land and get tracked.
-    match rpc_client.send_transaction(&tx).await {
-        Ok(sig) => {
-            let signature = sig.to_string();
-            let bundle_id = format!("bundle-{}", &signature[..8]);
-            Ok(BundleResult { bundle_id, signature })
-        }
-        Err(e) => {
-            let err_str = e.to_string();
-            if err_str.contains("BlockhashNotFound") || err_str.contains("expired") {
-                Err(BundleError::BlockhashExpired)
+    let tx_bytes = bincode::serialize(&tx).map_err(|e| BundleError::Unknown(e.to_string()))?;
+    let encoded_tx = bs58::encode(&tx_bytes).into_string();
+
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "sendBundle",
+        "params": [
+            [encoded_tx]
+        ]
+    });
+
+    let jito_url = std::env::var("JITO_BLOCK_ENGINE_URL")
+        .unwrap_or_else(|_| "https://mainnet.block-engine.jito.wtf/api/v1/bundles".to_string());
+    
+    // Make sure we have the correct path if only the host is provided
+    let jito_endpoint = if jito_url.ends_with("/api/v1/bundles") {
+        jito_url
+    } else {
+        format!("{}/api/v1/bundles", jito_url.trim_end_matches('/'))
+    };
+
+    match client.post(&jito_endpoint).json(&payload).send().await {
+        Ok(res) => {
+            if res.status().is_success() {
+                let body: serde_json::Value = res.json().await.unwrap_or_default();
+                if let Some(bundle_id) = body.get("result").and_then(|v| v.as_str()) {
+                    let signature = tx.signatures[0].to_string();
+                    Ok(BundleResult {
+                        bundle_id: bundle_id.to_string(),
+                        signature,
+                    })
+                } else {
+                    let err_msg = body.get("error").map(|e| e.to_string()).unwrap_or_default();
+                    if err_msg.contains("BlockhashNotFound") || err_msg.contains("expired") {
+                        Err(BundleError::BlockhashExpired)
+                    } else {
+                        Err(BundleError::Unknown(err_msg))
+                    }
+                }
             } else {
-                Err(BundleError::Unknown(err_str))
+                let err_text = res.text().await.unwrap_or_default();
+                Err(BundleError::Unknown(err_text))
             }
         }
+        Err(e) => Err(BundleError::Unknown(e.to_string())),
     }
 }
 
@@ -96,21 +127,52 @@ pub async fn submit_gasless_bundle(
     // (Note: The user's partial signature would normally be attached here before submission)
     tx.partial_sign(&[relayer_keypair], recent_blockhash);
 
-    // 4. Submit to Jito (or RPC for demo)
-    match rpc_client.send_transaction(&tx).await {
-        Ok(sig) => {
-            let signature = sig.to_string();
-            let bundle_id = format!("bundle-{}", &signature[..8]);
-            Ok(BundleResult { bundle_id, signature })
-        }
-        Err(e) => {
-            let err_str = e.to_string();
-            if err_str.contains("BlockhashNotFound") || err_str.contains("expired") {
-                Err(BundleError::BlockhashExpired)
+    let tx_bytes = bincode::serialize(&tx).map_err(|e| BundleError::Unknown(e.to_string()))?;
+    let encoded_tx = bs58::encode(&tx_bytes).into_string();
+
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "sendBundle",
+        "params": [
+            [encoded_tx]
+        ]
+    });
+
+    let jito_url = std::env::var("JITO_BLOCK_ENGINE_URL")
+        .unwrap_or_else(|_| "https://mainnet.block-engine.jito.wtf/api/v1/bundles".to_string());
+    
+    let jito_endpoint = if jito_url.ends_with("/api/v1/bundles") {
+        jito_url
+    } else {
+        format!("{}/api/v1/bundles", jito_url.trim_end_matches('/'))
+    };
+
+    match client.post(&jito_endpoint).json(&payload).send().await {
+        Ok(res) => {
+            if res.status().is_success() {
+                let body: serde_json::Value = res.json().await.unwrap_or_default();
+                if let Some(bundle_id) = body.get("result").and_then(|v| v.as_str()) {
+                    let signature = tx.signatures[0].to_string();
+                    Ok(BundleResult {
+                        bundle_id: bundle_id.to_string(),
+                        signature,
+                    })
+                } else {
+                    let err_msg = body.get("error").map(|e| e.to_string()).unwrap_or_default();
+                    if err_msg.contains("BlockhashNotFound") || err_msg.contains("expired") {
+                        Err(BundleError::BlockhashExpired)
+                    } else {
+                        Err(BundleError::Unknown(err_msg))
+                    }
+                }
             } else {
-                Err(BundleError::Unknown(err_str))
+                let err_text = res.text().await.unwrap_or_default();
+                Err(BundleError::Unknown(err_text))
             }
         }
+        Err(e) => Err(BundleError::Unknown(e.to_string())),
     }
 }
 
