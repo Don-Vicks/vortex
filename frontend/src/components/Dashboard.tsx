@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { Activity, Clock, Zap, AlertTriangle, CheckCircle2, MoreHorizontal } from 'lucide-react';
 import { useLifecycleLogs } from '../hooks/useLifecycleLogs';
 import type { LifecycleEvent } from '../types/lifecycle';
@@ -65,6 +66,85 @@ function EventRow({ event }: { event: LifecycleEvent }) {
   );
 }
 
+function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [successSig, setSuccessSig] = useState<string | null>(null);
+  const startEventId = useRef<string | null>(null);
+
+  const handleSwap = () => {
+    setIsSwapping(true);
+    setSuccessSig(null);
+    startEventId.current = latestEvent?.id || null;
+  };
+
+  useEffect(() => {
+    if (isSwapping && latestEvent && latestEvent.id !== startEventId.current) {
+      if (latestEvent.status === 'Confirmed' || latestEvent.status === 'Finalized') {
+        setIsSwapping(false);
+        setSuccessSig(latestEvent.signature);
+      }
+    }
+  }, [latestEvent, isSwapping]);
+
+  return (
+    <div className="glass-panel p-6 mb-8 border-indigo-100 bg-gradient-to-br from-indigo-50/50 to-white">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex-1">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
+            <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-xs">SDK Demo</span>
+            Kora Gasless Swap
+          </h2>
+          <p className="text-sm text-slate-500 max-w-md">
+            Clicking swap simulates an end-user making a transaction in your dApp. The Kora Relayer autonomously handles fee payment, dynamic Jito tipping, and landing.
+          </p>
+        </div>
+        
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full md:w-80 relative overflow-hidden">
+          {isSwapping && (
+             <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+               <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-3" />
+               <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider animate-pulse">Relaying to Kora...</span>
+             </div>
+          )}
+          <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
+            <div>
+              <div className="text-xs font-medium text-slate-500">Pay</div>
+              <div className="text-lg font-bold text-slate-800">100.00 USDC</div>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-slate-400" />
+            </div>
+          </div>
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <div className="text-xs font-medium text-slate-500">Receive</div>
+              <div className="text-lg font-bold text-slate-800">0.65 SOL</div>
+            </div>
+          </div>
+          <button 
+            onClick={handleSwap}
+            disabled={isSwapping}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-md shadow-indigo-200 transition-all text-sm"
+          >
+            Swap (0 Gas)
+          </button>
+          
+          {successSig && !isSwapping && (
+            <div className="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">
+              <div className="flex items-center gap-1.5 font-bold mb-1">
+                <CheckCircle2 className="w-4 h-4" /> Swap Landed!
+              </div>
+              <a href={`https://explorer.solana.com/tx/${successSig}?cluster=mainnet`} target="_blank" rel="noreferrer" className="underline truncate block">
+                {successSig.slice(0, 24)}...
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const { events, loading } = useLifecycleLogs();
   const latest = events[events.length - 1];
@@ -109,6 +189,8 @@ export function Dashboard() {
           </div>
         </div>
       </header>
+
+      <InteractiveDemo latestEvent={latest} />
 
       {latest && (
         <div className="glass-panel p-8 relative overflow-hidden bg-gradient-to-br from-white to-slate-50/50">
