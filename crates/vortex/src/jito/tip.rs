@@ -1,6 +1,6 @@
 use anyhow::Result;
-use serde::Deserialize;
 use reqwest::Client;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct JitoTipFloor {
@@ -45,7 +45,12 @@ pub async fn fetch_tip_stats(_rpc_url: &str) -> Result<TipStats> {
                     let median = (floor.landed_tips_50th_percentile * 1_000_000_000.0) as u64;
                     let average = (floor.landed_tips_75th_percentile * 1_000_000_000.0) as u64;
                     let max = (floor.landed_tips_95th_percentile * 1_000_000_000.0) as u64;
-                    return Ok(TipStats { min, max, median, average });
+                    return Ok(TipStats {
+                        min,
+                        max,
+                        median,
+                        average,
+                    });
                 }
             }
             fallback_stats()

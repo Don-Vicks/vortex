@@ -5,10 +5,9 @@ use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::tonic::transport::ClientTlsConfig;
 
 pub async fn connect() -> Result<GeyserGrpcClient<impl yellowstone_grpc_client::Interceptor>> {
-    let endpoint = env::var("YELLOWSTONE_ENDPOINT")
-        .context("YELLOWSTONE_ENDPOINT must be set in .env")?;
-    let token = env::var("YELLOWSTONE_TOKEN")
-        .context("YELLOWSTONE_TOKEN must be set in .env")?;
+    let endpoint =
+        env::var("YELLOWSTONE_ENDPOINT").context("YELLOWSTONE_ENDPOINT must be set in .env")?;
+    let token = env::var("YELLOWSTONE_TOKEN").context("YELLOWSTONE_TOKEN must be set in .env")?;
 
     info!(endpoint = %endpoint, "Connecting to Yellowstone gRPC...");
 

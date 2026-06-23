@@ -1,6 +1,6 @@
+use anyhow::Result;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
-use anyhow::Result;
 
 pub struct LeaderTracker {
     rpc_client: RpcClient,

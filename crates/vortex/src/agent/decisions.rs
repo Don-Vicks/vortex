@@ -1,5 +1,5 @@
-use crate::agent::{NetworkState, TipDecision, AgentConfig};
 use crate::agent::client::call_agent;
+use crate::agent::{AgentConfig, NetworkState, TipDecision};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -71,7 +71,9 @@ pub async fn decide_tip(config: &AgentConfig, state: &NetworkState) -> Result<Ti
         HARD_CEILING_LAMPORTS.min(state.tip_max)
     };
     let original = decision.recommended_lamports;
-    decision.recommended_lamports = decision.recommended_lamports.clamp(HARD_FLOOR_LAMPORTS, effective_ceiling);
+    decision.recommended_lamports = decision
+        .recommended_lamports
+        .clamp(HARD_FLOOR_LAMPORTS, effective_ceiling);
 
     if decision.recommended_lamports != original {
         decision.reasoning = format!(

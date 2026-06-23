@@ -1,6 +1,6 @@
 pub mod client;
-pub mod stream;
 pub mod rpc_fallback;
+pub mod stream;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

@@ -36,7 +36,12 @@ pub async fn fetch_tip_stats(_rpc_url: &str) -> Result<TipStats> {
                     let median = (floor.landed_tips_50th_percentile * 1_000_000_000.0) as u64;
                     let average = (floor.landed_tips_75th_percentile * 1_000_000_000.0) as u64;
                     let max = (floor.landed_tips_95th_percentile * 1_000_000_000.0) as u64;
-                    return Ok(TipStats { min, max, median, average });
+                    return Ok(TipStats {
+                        min,
+                        max,
+                        median,
+                        average,
+                    });
                 }
             }
             fallback_stats()
@@ -129,13 +134,18 @@ impl VortexDecisionMaker {
         let high_congestion = if recent_fees.is_empty() {
             false
         } else {
-            let mut fees: Vec<u64> = recent_fees.into_iter().map(|f| f.prioritization_fee).collect();
+            let mut fees: Vec<u64> = recent_fees
+                .into_iter()
+                .map(|f| f.prioritization_fee)
+                .collect();
             fees.sort();
             let median_fee = fees[fees.len() / 2];
             median_fee > 10_000
         };
 
-        let tip_stats = fetch_tip_stats(&self.rpc_url).await.unwrap_or_else(|_| fallback_stats().unwrap());
+        let tip_stats = fetch_tip_stats(&self.rpc_url)
+            .await
+            .unwrap_or_else(|_| fallback_stats().unwrap());
 
         if high_congestion {
             Ok(VortexDecision {
@@ -146,7 +156,9 @@ impl VortexDecisionMaker {
         } else {
             Ok(VortexDecision {
                 use_jito: false,
-                reason: "Network congestion is low. Normal transactions should land without Jito tips.".to_string(),
+                reason:
+                    "Network congestion is low. Normal transactions should land without Jito tips."
+                        .to_string(),
                 recommended_tip: None,
             })
         }

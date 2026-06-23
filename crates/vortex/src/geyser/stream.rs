@@ -1,4 +1,4 @@
-use crate::geyser::{GeyserEvent, SlotInfo, TxConfirmation, CommitmentLevel as InternalCommitment};
+use crate::geyser::{CommitmentLevel as InternalCommitment, GeyserEvent, SlotInfo, TxConfirmation};
 use anyhow::Result;
 use chrono::Utc;
 use std::collections::HashMap;
@@ -37,7 +37,10 @@ pub async fn subscribe_slots(
         }
 
         if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
-            error!("Max reconnect attempts ({}) reached. Giving up.", MAX_RECONNECT_ATTEMPTS);
+            error!(
+                "Max reconnect attempts ({}) reached. Giving up.",
+                MAX_RECONNECT_ATTEMPTS
+            );
             return Err(anyhow::anyhow!(
                 "Geyser stream failed after {} reconnect attempts",
                 MAX_RECONNECT_ATTEMPTS
@@ -90,7 +93,10 @@ async fn try_subscribe(
     };
 
     let (_, mut stream) = client.subscribe_with_request(Some(request)).await?;
-    info!("Geyser subscription active (Processed commitment, tx_tracking={})", wallet_pubkey.is_some());
+    info!(
+        "Geyser subscription active (Processed commitment, tx_tracking={})",
+        wallet_pubkey.is_some()
+    );
 
     while let Some(message) = stream.next().await {
         match message {
@@ -109,7 +115,8 @@ async fn try_subscribe(
                             }
                         }
                         subscribe_update::UpdateOneof::Transaction(tx) => {
-                            let sig = bs58::encode(&tx.transaction.as_ref().unwrap().signature).into_string();
+                            let sig = bs58::encode(&tx.transaction.as_ref().unwrap().signature)
+                                .into_string();
                             let tx_conf = TxConfirmation {
                                 signature: sig,
                                 slot: tx.slot,

@@ -1,4 +1,4 @@
-use crate::agent::{AiProvider, AgentConfig};
+use crate::agent::{AgentConfig, AiProvider};
 use anyhow::Result;
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -158,7 +158,10 @@ mod tests {
     #[test]
     fn test_strip_markdown_fences_json() {
         let input = "```json\n{\"recommended_lamports\": 1000}\n```";
-        assert_eq!(strip_markdown_fences(input), "{\"recommended_lamports\": 1000}");
+        assert_eq!(
+            strip_markdown_fences(input),
+            "{\"recommended_lamports\": 1000}"
+        );
     }
 
     #[test]

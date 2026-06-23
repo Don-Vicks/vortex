@@ -1,13 +1,9 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::Keypair,
-    signer::Signer,
-    system_instruction,
-    transaction::Transaction,
-    hash::Hash,
-};
 use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_sdk::{
+    hash::Hash, pubkey::Pubkey, signature::Keypair, signer::Signer, system_instruction,
+    transaction::Transaction,
+};
 use std::str::FromStr;
 
 use crate::jito::tip::TIP_ACCOUNTS;
@@ -41,7 +37,7 @@ pub async fn submit_bundle(
     rpc_client: &RpcClient,
 ) -> Result<BundleResult, BundleError> {
     let tip_ix = build_tip_instruction(&keypair.pubkey(), tip_lamports);
-    
+
     // Create a dummy transfer to simulate real work alongside the tip
     let recipient = keypair.pubkey(); // Send to self to avoid rent-exemption errors
     let transfer_ix = system_instruction::transfer(&keypair.pubkey(), &recipient, 1);
@@ -68,7 +64,7 @@ pub async fn submit_bundle(
 
     let jito_url = std::env::var("JITO_BLOCK_ENGINE_URL")
         .unwrap_or_else(|_| "https://mainnet.block-engine.jito.wtf/api/v1/bundles".to_string());
-    
+
     // Make sure we have the correct path if only the host is provided
     let jito_endpoint = if jito_url.ends_with("/api/v1/bundles") {
         jito_url
@@ -118,10 +114,7 @@ pub async fn submit_gasless_bundle(
     instructions.push(tip_ix);
 
     // 2. Construct the transaction, explicitly setting the relayer as the fee payer
-    let mut tx = Transaction::new_with_payer(
-        &instructions,
-        Some(&relayer_keypair.pubkey()),
-    );
+    let mut tx = Transaction::new_with_payer(&instructions, Some(&relayer_keypair.pubkey()));
 
     // 3. The relayer signs the transaction to authorize fee payment.
     // (Note: The user's partial signature would normally be attached here before submission)
@@ -142,7 +135,7 @@ pub async fn submit_gasless_bundle(
 
     let jito_url = std::env::var("JITO_BLOCK_ENGINE_URL")
         .unwrap_or_else(|_| "https://mainnet.block-engine.jito.wtf/api/v1/bundles".to_string());
-    
+
     let jito_endpoint = if jito_url.ends_with("/api/v1/bundles") {
         jito_url
     } else {
@@ -175,4 +168,3 @@ pub async fn submit_gasless_bundle(
         Err(e) => Err(BundleError::Unknown(e.to_string())),
     }
 }
-
