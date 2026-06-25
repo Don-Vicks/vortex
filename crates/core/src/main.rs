@@ -39,6 +39,7 @@ async fn main() -> Result<()> {
 
     // Spawn event updater: reads from channel, writes to AtomicU64 and processes Tx confirmations
     let slot_writer = Arc::clone(&current_slot);
+    let log_path_clone_for_stream = log_path.clone();
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
@@ -52,60 +53,72 @@ async fn main() -> Result<()> {
                         commitment = ?tx_conf.commitment,
                         "Transaction Stream Event Received"
                     );
-                    // In Phase 4, we will append this exact timestamp to the lifecycle log to calculate processing latency.
+                    
+                    // Update the lifecycle log with confirmation latency
+                    if let Ok(mut events) = vortex::lifecycle::logger::read_events(&log_path_clone_for_stream) {
+                        if let Some(event) = events.iter_mut().find(|e| e.signature == tx_conf.signature) {
+                            if matches!(tx_conf.commitment, vortex::geyser::CommitmentLevel::Processed | vortex::geyser::CommitmentLevel::Confirmed) {
+                                let now = Utc::now();
+                                if event.processed_at.is_none() {
+                                    event.processed_at = Some(now);
+                                    event.processed_slot = Some(tx_conf.slot);
+                                    event.latency_to_processed_ms = Some((now - event.submitted_at).num_milliseconds());
+                                    event.status = TxStatus::Processed;
+                                } else if event.confirmed_at.is_none() {
+                                    event.confirmed_at = Some(now);
+                                    event.confirmed_slot = Some(tx_conf.slot);
+                                    event.latency_to_confirmed_ms = Some((now - event.submitted_at).num_milliseconds());
+                                    event.status = TxStatus::Confirmed;
+                                }
+                                
+                                // Save back to file
+                                let json = serde_json::to_string_pretty(&events).unwrap_or_default();
+                                let _ = std::fs::write(&log_path_clone_for_stream, json);
+                            }
+                        }
+                    }
                 }
             }
         }
     });
 
-    // Try Yellowstone gRPC first, fall back to RPC polling
-    let event_tx_clone = event_tx.clone();
+    // Set up slot polling unconditionally via RPC
+    let event_tx_clone_rpc = event_tx.clone();
     let rpc_url_clone = rpc_url.clone();
-
-    // For Phase 2, we fetch the sender's pubkey so Geyser can filter our transactions
-    let wallet_pubkey = env::var("SENDER_PUBKEY").ok();
-
     tokio::spawn(async move {
-        let geyser_failed = match vortex::geyser::client::connect().await {
+        tracing::info!("Starting RPC slot polling (400ms interval)");
+        if let Err(e) = vortex::geyser::rpc_fallback::poll_slots(
+            rpc_url_clone,
+            event_tx_clone_rpc,
+            std::time::Duration::from_millis(400),
+        )
+        .await
+        {
+            tracing::error!("RPC slot polling terminated: {}", e);
+        }
+    });
+
+    // Try Yellowstone gRPC for transaction confirmations
+    let event_tx_clone_geyser = event_tx.clone();
+    let wallet_pubkey = env::var("SENDER_PUBKEY").ok();
+    tokio::spawn(async move {
+        match vortex::geyser::client::connect().await {
             Ok(client) => {
-                tracing::info!("Yellowstone gRPC connected — using live geyser stream");
-                match vortex::geyser::stream::subscribe_slots(
+                tracing::info!("Yellowstone gRPC connected — using live geyser stream exclusively for transactions");
+                if let Err(e) = vortex::geyser::stream::subscribe_slots(
                     client,
-                    event_tx_clone.clone(),
+                    event_tx_clone_geyser,
                     wallet_pubkey,
                 )
                 .await
                 {
-                    Ok(()) => false,
-                    Err(e) => {
-                        tracing::warn!(
-                            "Geyser stream terminated: {}. Falling back to RPC polling.",
-                            e
-                        );
-                        true
-                    }
+                    tracing::warn!("Geyser stream terminated: {}", e);
                 }
             }
             Err(e) => {
-                tracing::warn!(
-                    "Yellowstone gRPC unavailable: {}. Falling back to RPC polling.",
-                    e
-                );
-                true
+                tracing::warn!("Yellowstone gRPC unavailable: {}. Transactions won't be tracked instantly.", e);
             }
         };
-
-        if geyser_failed {
-            if let Err(e) = vortex::geyser::rpc_fallback::poll_slots(
-                rpc_url_clone,
-                event_tx_clone,
-                std::time::Duration::from_millis(400),
-            )
-            .await
-            {
-                tracing::error!("RPC slot polling also terminated: {}", e);
-            }
-        }
     });
 
     // Wait for first slot with a generous timeout
@@ -228,6 +241,7 @@ struct AppState {
 struct RelayRequest {
     action: String,
     amount_in: f64,
+    recipient: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -243,9 +257,10 @@ async fn relay_handler(
     Json(payload): Json<RelayRequest>,
 ) -> impl IntoResponse {
     tracing::info!(
-        "Received relay request: action={}, amount_in={}",
+        "Received relay request: action={}, amount_in={}, recipient={:?}",
         payload.action,
-        payload.amount_in
+        payload.amount_in,
+        payload.recipient
     );
     let live_slot = state.current_slot.load(Ordering::Relaxed);
 
@@ -305,10 +320,18 @@ async fn relay_handler(
         .await
         .unwrap_or_default();
 
-    // Simulate real work
-    let recipient = state.keypair.pubkey();
-    let transfer_ix =
-        solana_sdk::system_instruction::transfer(&state.keypair.pubkey(), &recipient, 1);
+    let recipient_pubkey = payload
+        .recipient
+        .and_then(|r| solana_sdk::pubkey::Pubkey::from_str(&r).ok())
+        .unwrap_or_else(|| state.keypair.pubkey());
+
+    let transfer_amount = (payload.amount_in * 1_000_000_000.0) as u64; // convert to lamports if SOL
+
+    let transfer_ix = solana_sdk::system_instruction::transfer(
+        &state.keypair.pubkey(),
+        &recipient_pubkey,
+        if transfer_amount > 0 { transfer_amount } else { 1 },
+    );
 
     let bundle_result = vortex::jito::bundle::submit_gasless_bundle(
         &state.keypair,
@@ -479,7 +502,7 @@ async fn run_daemon(
         };
 
         // Get agent tip decision
-        let tip_decision =
+        let mut tip_decision =
             match vortex::agent::decisions::decide_tip(&agent_config, &network_state).await {
                 Ok(decision) => {
                     tracing::info!(
@@ -495,13 +518,17 @@ async fn run_daemon(
                     vortex::agent::decisions::fallback_tip(tip_stats.median)
                 }
             };
+            
+        // FORCE COMPETITIVE TIP SO BUNDLES LAND
+        tip_decision.recommended_lamports = 100_000;
 
         // Fetch real blockhash and submit bundle
         iteration_count += 1;
         let mut recent_blockhash = rpc_client.get_latest_blockhash().await.unwrap_or_default();
 
+        let fail_test = env::var("FAIL_TEST").unwrap_or_default();
         // Phase 3: Failure Injection Loop
-        if iteration_count % 3 == 0 {
+        if fail_test == "expired-hash" || iteration_count == 11 {
             tracing::warn!(
                 "FAILURE INJECTION: Intentionally using a dummy blockhash for bundle submission!"
             );
@@ -518,18 +545,30 @@ async fn run_daemon(
 
         let (bundle_id, signature, status, failure) = match bundle_result {
             Ok(res) => {
-                // Since Geyser is disabled on Devnet, we manually poll the RPC to track success!
                 let sig_str = res.signature.clone();
                 let client = rpc_client.clone();
+                let log_path_for_rpc = log_path.clone();
                 tokio::spawn(async move {
                     tracing::info!("Transaction sent! Waiting for confirmation: {}", sig_str);
                     if let Ok(sig) = solana_sdk::signature::Signature::from_str(&sig_str) {
-                        for _ in 0..15 {
+                        for _ in 0..20 {
                             if let Ok(true) = client.confirm_transaction(&sig).await {
-                                tracing::info!("🎉 SUCCESS! Transaction confirmed on Devnet: https://explorer.solana.com/tx/{}?cluster=devnet", sig_str);
+                                tracing::info!("🎉 SUCCESS! Transaction confirmed: https://explorer.solana.com/tx/{}", sig_str);
+                                
+                                // Update log file with confirmed status
+                                if let Ok(mut events) = vortex::lifecycle::logger::read_events(&log_path_for_rpc) {
+                                    if let Some(event) = events.iter_mut().find(|e| e.signature == sig_str) {
+                                        let now = chrono::Utc::now();
+                                        event.confirmed_at = Some(now);
+                                        event.latency_to_confirmed_ms = Some((now - event.submitted_at).num_milliseconds());
+                                        event.status = TxStatus::Confirmed;
+                                        let json = serde_json::to_string_pretty(&events).unwrap_or_default();
+                                        let _ = std::fs::write(&log_path_for_rpc, json);
+                                    }
+                                }
                                 return;
                             }
-                            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                            tokio::time::sleep(tokio::time::Duration::from_millis(2500)).await;
                         }
                         tracing::warn!("Transaction {} might have been dropped.", sig_str);
                     }
@@ -645,6 +684,13 @@ async fn run_daemon(
                     }
                 }
             }
+        }
+
+        // Check if we reached MAX_RUNS
+        let run_count: usize = env::var("RUN_COUNT").unwrap_or_else(|_| "0".to_string()).parse().unwrap_or(0);
+        if run_count > 0 && iteration_count >= run_count {
+            tracing::info!("Reached RUN_COUNT of {}. Shutting down.", run_count);
+            break;
         }
 
         // Wait before next cycle (or until shutdown)

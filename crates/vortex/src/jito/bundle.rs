@@ -14,6 +14,8 @@ pub enum BundleError {
     BlockhashExpired,
     LeaderSkipped,
     Timeout,
+    RateLimit,
+    JitoDropped,
     Unknown(String),
 }
 
@@ -86,13 +88,21 @@ pub async fn submit_bundle(
                     let err_msg = body.get("error").map(|e| e.to_string()).unwrap_or_default();
                     if err_msg.contains("BlockhashNotFound") || err_msg.contains("expired") {
                         Err(BundleError::BlockhashExpired)
+                    } else if err_msg.contains("-32097") {
+                        Err(BundleError::JitoDropped)
+                    } else if err_msg.contains("rate limit") || err_msg.contains("429") {
+                        Err(BundleError::RateLimit)
                     } else {
                         Err(BundleError::Unknown(err_msg))
                     }
                 }
             } else {
-                let err_text = res.text().await.unwrap_or_default();
-                Err(BundleError::Unknown(err_text))
+                if res.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    Err(BundleError::RateLimit)
+                } else {
+                    let err_text = res.text().await.unwrap_or_default();
+                    Err(BundleError::Unknown(err_text))
+                }
             }
         }
         Err(e) => Err(BundleError::Unknown(e.to_string())),
@@ -156,13 +166,21 @@ pub async fn submit_gasless_bundle(
                     let err_msg = body.get("error").map(|e| e.to_string()).unwrap_or_default();
                     if err_msg.contains("BlockhashNotFound") || err_msg.contains("expired") {
                         Err(BundleError::BlockhashExpired)
+                    } else if err_msg.contains("-32097") {
+                        Err(BundleError::JitoDropped)
+                    } else if err_msg.contains("rate limit") || err_msg.contains("429") {
+                        Err(BundleError::RateLimit)
                     } else {
                         Err(BundleError::Unknown(err_msg))
                     }
                 }
             } else {
-                let err_text = res.text().await.unwrap_or_default();
-                Err(BundleError::Unknown(err_text))
+                if res.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    Err(BundleError::RateLimit)
+                } else {
+                    let err_text = res.text().await.unwrap_or_default();
+                    Err(BundleError::Unknown(err_text))
+                }
             }
         }
         Err(e) => Err(BundleError::Unknown(e.to_string())),

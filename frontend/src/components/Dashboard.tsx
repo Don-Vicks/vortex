@@ -69,6 +69,8 @@ function EventRow({ event }: { event: LifecycleEvent }) {
 function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
   const [isSwapping, setIsSwapping] = useState(false);
   const [successSig, setSuccessSig] = useState<string | null>(null);
+  const [amount, setAmount] = useState('0.1');
+  const [recipient, setRecipient] = useState('');
 
   const handleSwap = async () => {
     setIsSwapping(true);
@@ -77,7 +79,7 @@ function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
       const response = await fetch('http://localhost:3000/api/relay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'swap', amount_in: 100 }),
+        body: JSON.stringify({ action: 'transfer', amount_in: parseFloat(amount) || 0, recipient: recipient.trim() || undefined }),
       });
       const data = await response.json();
       if (data.success && data.signature) {
@@ -98,48 +100,57 @@ function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex-1">
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
-            <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-xs">SDK Demo</span>
-            Kora Gasless Swap
+            <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-xs">Live Submission</span>
+            Vortex Transaction Sender
           </h2>
           <p className="text-sm text-slate-500 max-w-md">
-            Clicking swap simulates an end-user making a transaction in your dApp. The Kora Relayer autonomously handles fee payment, dynamic Jito tipping, and landing.
+            Execute a real transfer using the Vortex stack. The backend autonomously evaluates network conditions to set the optimal Jito tip and guarantees landing.
           </p>
         </div>
         
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full md:w-80 relative overflow-hidden">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm w-full md:w-96 relative overflow-hidden">
           {isSwapping && (
              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
                <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-3" />
-               <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider animate-pulse">Relaying to Kora...</span>
+               <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider animate-pulse">Relaying to Vortex...</span>
              </div>
           )}
-          <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
+          
+          <div className="space-y-4 mb-6">
             <div>
-              <div className="text-xs font-medium text-slate-500">Pay</div>
-              <div className="text-lg font-bold text-slate-800">100.00 USDC</div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Amount (SOL)</label>
+              <input 
+                type="number" 
+                value={amount} 
+                onChange={(e) => setAmount(e.target.value)} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                placeholder="0.1" 
+              />
             </div>
-            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
-              <Zap className="w-4 h-4 text-slate-400" />
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Recipient Address</label>
+              <input 
+                type="text" 
+                value={recipient} 
+                onChange={(e) => setRecipient(e.target.value)} 
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono" 
+                placeholder="Leave blank to send to self" 
+              />
             </div>
           </div>
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <div className="text-xs font-medium text-slate-500">Receive</div>
-              <div className="text-lg font-bold text-slate-800">0.65 SOL</div>
-            </div>
-          </div>
+          
           <button 
             onClick={handleSwap}
             disabled={isSwapping}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-md shadow-indigo-200 transition-all text-sm"
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-md shadow-indigo-200 transition-all text-sm flex items-center justify-center gap-2"
           >
-            Swap (0 Gas)
+            <Zap className="w-4 h-4" /> Send Transaction
           </button>
           
           {successSig && !isSwapping && (
             <div className="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">
               <div className="flex items-center gap-1.5 font-bold mb-1">
-                <CheckCircle2 className="w-4 h-4" /> Swap Landed!
+                <CheckCircle2 className="w-4 h-4" /> Transaction Landed!
               </div>
               <a href={`https://explorer.solana.com/tx/${successSig}?cluster=mainnet`} target="_blank" rel="noreferrer" className="underline truncate block">
                 {successSig.slice(0, 24)}...

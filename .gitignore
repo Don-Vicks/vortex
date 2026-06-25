@@ -11,3 +11,7 @@ KORA_ARCHITECTURE.md
 Complexity Assessment.md
 keypair.json
 *.json
+
+# Helper Scripts
+scratch/
+generate_evidence.js

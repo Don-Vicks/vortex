@@ -58,16 +58,6 @@ async fn try_subscribe(
     sender: &mpsc::Sender<GeyserEvent>,
     wallet_pubkey: &Option<String>,
 ) -> Result<()> {
-    let mut slots_map = HashMap::new();
-    slots_map.insert(
-        "client".to_string(),
-        SubscribeRequestFilterSlots {
-            // Filter to Confirmed commitment — avoids noisy Processed updates if true.
-            // But we want ALL commitment levels (Processed, Confirmed, Rooted) to track lifecycle!
-            filter_by_commitment: Some(true),
-        },
-    );
-
     let mut transactions_map = HashMap::new();
     if let Some(pubkey) = wallet_pubkey {
         transactions_map.insert(
@@ -84,10 +74,7 @@ async fn try_subscribe(
     }
 
     let request = SubscribeRequest {
-        slots: slots_map,
         transactions: transactions_map,
-        // We set the stream to 'Processed' so we receive updates as soon as the validator sees them.
-        // We will receive slot updates for Processed, Confirmed, and Rooted states.
         commitment: Some(CommitmentLevel::Processed as i32),
         ..Default::default()
     };

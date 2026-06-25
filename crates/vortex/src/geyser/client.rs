@@ -11,9 +11,14 @@ pub async fn connect() -> Result<GeyserGrpcClient<impl yellowstone_grpc_client::
 
     info!(endpoint = %endpoint, "Connecting to Yellowstone gRPC...");
 
-    let client = GeyserGrpcClient::build_from_shared(endpoint)?
-        .x_token(Some(token))?
-        .tls_config(ClientTlsConfig::new())?
+    let mut builder = GeyserGrpcClient::build_from_shared(endpoint.clone())?
+        .x_token(Some(token))?;
+        
+    if endpoint.starts_with("https://") {
+        builder = builder.tls_config(ClientTlsConfig::new())?;
+    }
+
+    let client = builder
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(10))
         .connect()
