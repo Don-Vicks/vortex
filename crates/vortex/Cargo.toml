@@ -1,6 +1,6 @@
 [package]
 name = "solana-vortex"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "A dynamic decision engine and transaction stack to automatically evaluate Solana network conditions, protect against MEV, and conditionally tip Jito bundles."
 license = "MIT OR Apache-2.0"
