@@ -36,7 +36,7 @@ pub async fn submit_bundle(
     keypair: &Keypair,
     recent_blockhash: Hash,
     tip_lamports: u64,
-    rpc_client: &RpcClient,
+    _rpc_client: &RpcClient,
 ) -> Result<BundleResult, BundleError> {
     let tip_ix = build_tip_instruction(&keypair.pubkey(), tip_lamports);
 
