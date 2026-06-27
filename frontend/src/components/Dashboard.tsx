@@ -24,7 +24,9 @@ function EventRow({ event }: { event: LifecycleEvent }) {
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors group">
       <td className="px-5 py-4 font-mono text-xs text-slate-500">
-        {event.signature.slice(0, 12)}...
+        <a href={`https://explorer.solana.com/tx/${event.signature}`} target="_blank" rel="noreferrer" className="hover:text-indigo-600 hover:underline">
+          {event.signature.slice(0, 12)}...
+        </a>
       </td>
       <td className="px-5 py-4 font-mono text-sm text-slate-700 font-medium">
         {event.tip_lamports.toLocaleString()}
@@ -152,7 +154,7 @@ function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
               <div className="flex items-center gap-1.5 font-bold mb-1">
                 <CheckCircle2 className="w-4 h-4" /> Transaction Landed!
               </div>
-              <a href={`https://explorer.solana.com/tx/${successSig}?cluster=mainnet`} target="_blank" rel="noreferrer" className="underline truncate block">
+              <a href={`https://explorer.solana.com/tx/${successSig}`} target="_blank" rel="noreferrer" className="underline truncate block">
                 {successSig.slice(0, 24)}...
               </a>
             </div>

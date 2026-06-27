@@ -553,7 +553,9 @@ async fn run_daemon(
                     if let Ok(sig) = solana_sdk::signature::Signature::from_str(&sig_str) {
                         for _ in 0..20 {
                             if let Ok(true) = client.confirm_transaction(&sig).await {
-                                tracing::info!("🎉 SUCCESS! Transaction confirmed: https://explorer.solana.com/tx/{}", sig_str);
+                                let url = client.url();
+                                let cluster_param = if url.contains("devnet") { "?cluster=devnet" } else if url.contains("testnet") { "?cluster=testnet" } else { "" };
+                                tracing::info!("🎉 SUCCESS! Transaction confirmed: https://explorer.solana.com/tx/{}{}", sig_str, cluster_param);
                                 
                                 // Update log file with confirmed status
                                 if let Ok(mut events) = vortex::lifecycle::logger::read_events(&log_path_for_rpc) {
