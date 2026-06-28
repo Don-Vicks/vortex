@@ -21,8 +21,7 @@ async fn main() -> Result<()> {
     dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let rpc_url =
-        env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+    let rpc_url = env::var("SOLANA_RPC_URL").expect("SOLANA_RPC_URL must be set");
     let log_path =
         env::var("LOG_FILE_PATH").unwrap_or_else(|_| "./logs/lifecycle.json".to_string());
 
@@ -175,13 +174,11 @@ async fn main() -> Result<()> {
         env::var("WALLET_KEYPAIR_PATH").unwrap_or_else(|_| "./keypair.json".to_string());
     let keypair = read_keypair_file(&keypair_path)
         .expect("Failed to read wallet keypair. Make sure keypair.json exists.");
-    let mut iteration_count = 0;
 
     // Initialize Leader Tracker
     let leader_tracker = vortex::jito::leader::LeaderTracker::new(&rpc_url);
 
     let keypair = Arc::new(keypair);
-    let log_path_clone = log_path.clone();
 
     let app_state = Arc::new(AppState {
         current_slot: Arc::clone(&current_slot),
@@ -439,8 +436,8 @@ async fn run_daemon(
             }
         };
 
-        if next_jito_slot > live_slot + 5 {
-            // Jito leader is too far away, sleep for a bit to avoid burning RPC limits
+        if next_jito_slot > live_slot + 30 {
+            // Jito leader is too far away, sleep for a bit
             tracing::debug!(
                 "Next Jito leader is at slot {}, sleeping...",
                 next_jito_slot
@@ -450,7 +447,7 @@ async fn run_daemon(
         }
 
         tracing::info!(
-            "Jito leader window detected upcoming at slot: {}",
+            "Jito leader window approaching at slot: {}. Preparing tip decision...",
             next_jito_slot
         );
 
@@ -521,6 +518,19 @@ async fn run_daemon(
             
         // FORCE COMPETITIVE TIP SO BUNDLES LAND
         tip_decision.recommended_lamports = 100_000;
+
+        // Tightly wait for the Jito leader window to be imminent
+        loop {
+            let current_live_slot = current_slot.load(Ordering::Relaxed);
+            if next_jito_slot <= current_live_slot + 5 {
+                break;
+            }
+            if current_live_slot > next_jito_slot + 2 {
+                // We missed the leader!
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
 
         // Fetch real blockhash and submit bundle
         iteration_count += 1;
@@ -596,7 +606,7 @@ async fn run_daemon(
         };
 
         // Create and log lifecycle event
-        let mut event = LifecycleEvent {
+        let event = LifecycleEvent {
             id: Uuid::new_v4().to_string(),
             bundle_id,
             signature,

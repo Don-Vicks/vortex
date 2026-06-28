@@ -73,7 +73,16 @@ async fn try_subscribe(
         );
     }
 
+    let mut slots_map = HashMap::new();
+    slots_map.insert(
+        "client_slots".to_string(),
+        SubscribeRequestFilterSlots {
+            filter_by_commitment: Some(true),
+        },
+    );
+
     let request = SubscribeRequest {
+        slots: slots_map,
         transactions: transactions_map,
         commitment: Some(CommitmentLevel::Processed as i32),
         ..Default::default()

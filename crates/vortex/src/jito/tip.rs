@@ -31,9 +31,16 @@ pub const TIP_ACCOUNTS: [&str; 8] = [
 ];
 
 pub async fn fetch_tip_stats(_rpc_url: &str) -> Result<TipStats> {
+    let jito_url = std::env::var("JITO_BLOCK_ENGINE_URL").expect("JITO_BLOCK_ENGINE_URL must be set");
+    let jito_endpoint = if jito_url.ends_with("/api/v1/bundles") {
+        format!("{}/tip_floor", jito_url)
+    } else {
+        format!("{}/api/v1/bundles/tip_floor", jito_url.trim_end_matches('/'))
+    };
+
     let client = Client::new();
     let response = client
-        .get("https://mainnet.block-engine.jito.wtf/api/v1/bundles/tip_floor")
+        .get(&jito_endpoint)
         .send()
         .await;
 

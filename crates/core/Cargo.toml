@@ -18,3 +18,6 @@ solana-sdk = "1.18.0"
 axum = "0.8.9"
 tower-http = { version = "0.7.0", features = ["cors"] }
 serde = { workspace = true, features = ["derive"] }
+bs58 = "0.5.1"
+reqwest.workspace = true
+bincode = "1.3.3"
