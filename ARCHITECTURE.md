@@ -1,8 +1,8 @@
 # 🏛 Vortex: My Architecture & Engineering Journey
 
-When I first saw the requirements for the Solana Smart Transaction Infrastructure Bounty, I'll be honest—I was completely blank. I knew that getting a transaction to land during network congestion was a brutal experience, but I had no immediate idea how to actually solve it at the bare-metal level. 
+When I first saw the requirements for the Solana Smart Transaction Infrastructure Bounty, I'll be honest, I was completely blank. I knew that getting a transaction to land during network congestion was a brutal experience, but I had no immediate idea how to actually solve it at the bare-metal level. 
 
-It was only after diving deep into research—studying exactly why the traditional "spray and pray" approach fails, reading about TPU bottlenecks, and analyzing Jito's gRPC architecture—that the path forward became clear. This document outlines that research journey, how I approached the prompt, the engineering roadblocks I hit along the way, and the architecture I ultimately designed for **Vortex** to fulfill the bounty requirements.
+It was only after diving deep into research, studying exactly why the traditional "spray and pray" approach fails, reading about TPU bottlenecks, and analyzing Jito's gRPC architecture, that the path forward became clear. This document outlines that research journey, how I approached the prompt, the engineering roadblocks I hit along the way, and the architecture I ultimately designed for **Vortex** to fulfill the bounty requirements.
 
 ## 1. The Core Problems I Needed to Solve
 
@@ -91,7 +91,7 @@ graph TD
 ### 3.6 The `solana-vortex` Package: Open-Sourcing the Solution
 **The Problem:** While solving the bounty requirements (dealing with dropped transactions, HTTP rate limits, and dependency hell with Jito's gRPC crates), I realized the entire Solana developer community struggles with this, yet there was no modular, plug-and-play solution.
 **My Solution:** I decoupled the core engine of my architecture and published it as a modular library on `crates.io` called `solana-vortex`.
-**Why I Did It:** I needed to see others using it because the current ecosystem standard of "spray and pray" is fundamentally broken. By open-sourcing the engine, I wanted to give other developers building MEV bots, DeFi relayers, and automated agents the exact infrastructure I wished I had on day one. I wanted to establish a new standard for smart transaction routing on Solana—one that is autonomous, AI-driven, and relies on real-time data instead of blind guessing.
+**Why I Did It:** I needed to see others using it because the current ecosystem standard of "spray and pray" is fundamentally broken. By open-sourcing the engine, I wanted to give other developers building MEV bots, DeFi relayers, and automated agents the exact infrastructure I wished I had on day one. I wanted to establish a new standard for smart transaction routing on Solana: one that is autonomous, AI-driven, and relies on real-time data instead of blind guessing.
 
 ## 4. The Result
 By methodically addressing each bottleneck, I architected **Vortex**: a highly resilient, AI-driven infrastructure stack. When failures happen (because on Solana, they always do), my Failure Classifier catches them instantly via Geyser, loops the telemetry back to the AI, and autonomously recovers the transaction before a human could even hit refresh.

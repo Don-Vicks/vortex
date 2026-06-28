@@ -184,7 +184,7 @@ Here are my thoughts on the specific bounty questions based on what I learned wh
 
 ### 1. What does the delta between `processed_at` and `confirmed_at` tell me about network health?
 
-Basically, it tells me how fast the cluster is reaching consensus. When the delta is super low (like 400-800ms), it means the network is humming along—validators are voting fast and there's no congestion. When that delta spikes, it usually means the network is struggling with heavy fork switching or high CPU load, and blocks are taking longer to get voted on.
+Basically, it tells me how fast the cluster is reaching consensus. When the delta is super low (like 400-800ms), it means the network is running smoothly, meaning validators are voting fast and there's no congestion. When that delta spikes, it usually means the network is struggling with heavy fork switching or high CPU load, and blocks are taking longer to get voted on.
 
 ### 2. Why did I avoid using finalized commitment when fetching a blockhash?
 
@@ -192,4 +192,4 @@ Because it wastes way too much time. A blockhash is only good for about 150 slot
 
 ### 3. What happens to my bundle if the Jito leader skips their slot?
 
-If the Jito leader I targeted skips their slot, the Jito Block Engine just drops the bundle for that slot. Technically Jito might try to forward it if the blockhash is still alive, but I don't like leaving that to chance. The best way I found to handle this—and how I built the Vortex daemon to work—is to watch the Geyser stream like a hawk. The second I see a `LeaderSkipped` or `Timeout`, I have my engine pull a fresh blockhash, recalculate the tip, and immediately fire a retry at the next Jito leader.
+If the Jito leader I targeted skips their slot, the Jito Block Engine just drops the bundle for that slot. Technically Jito might try to forward it if the blockhash is still alive, but I don't like leaving that to chance. The best way I found to handle this (and how I built the Vortex daemon to work) is to watch the Geyser stream like a hawk. The second I see a `LeaderSkipped` or `Timeout`, I have my engine pull a fresh blockhash, recalculate the tip, and immediately fire a retry at the next Jito leader.
