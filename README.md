@@ -1,97 +1,147 @@
-# 🚀 Vortex: Solana Smart Transaction Stack
+# Vortex: Solana Transaction Execution & Reliability Stack
 
 <div align="center">
   <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust" />
   <img src="https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=solana&logoColor=black" alt="Solana" />
-  <img src="https://img.shields.io/badge/AI_Agent-Multi--Model_Support-blue?style=for-the-badge" alt="AI Agent" />
-  <img src="https://img.shields.io/badge/Geyser-Yellowstone-orange?style=for-the-badge" alt="Geyser" />
-  <img src="https://img.shields.io/badge/Status-Production_Ready-success?style=for-the-badge" alt="Status" />
+  <img src="https://img.shields.io/badge/gRPC-Yellowstone_%26_Jito-orange?style=for-the-badge" alt="gRPC" />
+  <img src="https://img.shields.io/badge/AI_Agent-Multi--Model-blue?style=for-the-badge" alt="AI Agent" />
+  <img src="https://img.shields.io/badge/Status-Active_Prototype-success?style=for-the-badge" alt="Status" />
 </div>
 
 <br/>
 
-I built **Vortex** to tackle the Solana Smart Transaction Infrastructure Bounty. 
-
-The bounty challenge asked for a solution to a massive pain point for anyone building bots or relayers on Solana: the traditional "spray and pray" approach where transactions drop randomly, public APIs throttle you, and missed slots cost real money. 
-
-To solve the bounty's requirements, I designed Vortex to dynamically evaluate network congestion, predict slot leaders, and use an AI agent to calculate the exact tip needed to guarantee inclusion. I also built a live React frontend dashboard to visually prove the system works in real time.
+> **🎥 Demo Video:** Coming soon
 
 ---
 
-## 📖 Table of Contents
+## 📌 Executive Summary
 
-- [The Challenge & My Approach](#-the-challenge--my-approach)
-- [Key Features I Built](#-key-features-i-built)
-- [Project Structure](#-project-structure)
-- [Prerequisites](#-prerequisites)
-- [Getting Started](#-getting-started)
-- [Configuration & Modes](#-configuration--modes)
-- [Bounty Requirements & Mechanics](#-bounty-requirements--mechanics)
+**Vortex** is a Solana transaction execution and reliability stack built in Rust.
 
----
+During periods of high Solana network congestion, standard transaction delivery methods ("spray and pray") often suffer from dropped transactions, HTTP RPC rate limits, and inefficient fee estimation. Hardcoding fixed priority fees or static Jito tips either overpays during low-volume periods or fails to land during MEV spikes.
 
-## 🧠 The Challenge & My Approach
+Vortex addresses these execution challenges by combining **real-time network telemetry**, **native gRPC streaming**, **dual-path submission**, and **AI-assisted dynamic tip decision making**.
 
-When I started this project, getting a transaction to consistently land on-chain was brutally hard.
-
-Initially, I relied on Jito's public `sendBundle` REST endpoints. But I quickly noticed that during network congestion, my unauthenticated searcher bundles were silently dropped. I could send a perfectly valid transaction, pay the tip, and still watch it disappear into the void. To make matters worse, integrating heavy pre-compiled gRPC crates often forced me into dependency hell, especially since I needed to maintain strict compatibility with `solana-client v1.18.x`.
-
-I realized I couldn't rely on REST APIs for mission-critical execution. I needed a stack that was as close to the bare metal of the network as possible.
-
-### How I Fixed It: Native gRPC, Dual-Send & AI Tipping
-
-1. **Yellowstone Geyser**: Instead of fighting with standard HTTP limits and slow polling, I rebuilt the network layer to operate exclusively via real-time streams, subscribing directly to TPU confirmations.
-2. **Native `.proto` Compilation**: To bypass the dependency conflicts holding me back from Jito's gRPC Block Engine, I ripped out the bloated crates. I directly downloaded Jito's raw `.proto` schemas and compiled them into native Rust within my own workspace.
-3. **Dual-Send Strategy**: To guarantee absolute liveness, I designed Vortex to simultaneously blast every bundle via native gRPC to the Jito Block Engine _and_ redundantly fire it to a standard premium RPC. If Jito drops it, the standard RPC catches it.
-4. **AI-Driven Tipping**: Static tipping is a surefire way to lose money. I integrated an AI Agent (supporting Claude, OpenAI, Gemini, Grok) that analyzes live tip percentiles and my failure rates to dynamically calculate my exact tip.
-
-> **Deep Dive**: For a full look at my thought process and the system's data flow, check out the [ARCHITECTURE.md](./ARCHITECTURE.md) I wrote.
+- **Primary Repository:** [solana-tx-stack](https://github.com/Don-Vicks/solana-tx-stack)
+- **Crate Package:** `solana-vortex` (`crates/vortex`)
+- **Architecture Spec:** See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed technical design choices.
 
 ---
 
-## ✨ Key Features I Built
+## 🛠 What I Built
 
-- 🎯 **Jito Leader Window Prediction**: By tracking the live slot against the epoch's leader schedule, I ensure Vortex only fires transactions when a Jito validator is up next.
-- ⚡ **Zero-Latency Streaming**: I completely replaced sluggish `getSignatureStatuses` polling with Yellowstone gRPC streaming.
-- 🛡️ **Autonomous Recovery**: I built a daemon capable of detecting dropped blocks and expired blockhashes. When I artificially inject a failure, the AI immediately steps in, recalculates the tip, and fetches a fresh blockhash to retry.
-- 📊 **Real-Time React Dashboard**: I built a Vite/React dashboard that streams transaction states (`submitted`, `processed`, `confirmed`, `finalized`) with millisecond precision latency deltas directly to my browser.
+I designed and implemented the following core components in this workspace:
+
+* **Dual-Path Execution Engine (`crates/vortex/src/jito/bundle.rs`, `crates/core/src/main.rs`)** — Constructs signed transactions and bundles, simultaneously firing them over native Jito searcher gRPC (`send_bundle_no_wait`) and redundantly broadcasting them to a standard Solana RPC to maximize landing probability.
+* **Yellowstone Geyser Stream & Fallback Poller (`crates/vortex/src/geyser/`)** — Real-time gRPC slot and transaction confirmation receiver with auto-reconnect logic, backed by a 400ms RPC slot polling fallback when gRPC is unconfigured.
+* **Native Jito gRPC Compilation (`crates/vortex/build.rs`, `crates/vortex/proto/`)** — Direct integration of Jito's official Protocol Buffer schemas compiled via `tonic-build` / `prost`, avoiding dependency conflicts with `solana-client v1.18`.
+* **Multi-Model AI Tip Engine (`crates/vortex/src/agent/`)** — Telemetry-driven decision layer supporting Anthropic Claude, OpenAI GPT, Google Gemini, and xAI Grok. Evaluates live slot metrics, Jito tip percentiles, and failure rates with strict hard bounds enforcement.
+* **Failure Classifier & Recovery Daemon (`crates/vortex/src/failures/`, `crates/core/src/main.rs`)** — Categorizes RPC/bundle errors (`ExpiredBlockhash`, `FeeTooLow`, `LeaderSkipped`) and triggers an automated retry loop (fresh blockhash fetch, tip escalation).
+* **Monitoring Dashboard & Relayer API (`crates/core/src/main.rs`, `frontend/`)** — Axum HTTP server (`/api/relay` endpoint on port 3000) and React 19 / Vite dashboard for real-time visualization of transaction states and confirmation latency deltas.
 
 ---
 
-## 📂 Project Structure
+## 🤖 Where AI Fits
 
-This is a full-stack monorepo I structured for high performance:
+AI in Vortex operates strictly as a **constrained decision engine** embedded in the execution loop, rather than a conversational overlay.
 
-```text
-solana-tx-stack/
-├── crates/
-│   ├── core/                # Main entrypoint, HTTP Relayer API, and Daemon loop
-│   └── vortex/              # My core engine: AI logic, Geyser streaming, and Jito bundling
-│       └── proto/           # Official Jito .proto schemas I compiled for native gRPC
-├── frontend/                # React/Vite dashboard for live tracking
-├── logs/                    # JSON data stores for precision latency tracking
-├── .env.example             # Template for RPCs and API Keys
-├── ARCHITECTURE.md          # My in-depth system design documentation
-└── README.md                # Project documentation
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. INPUT TELEMETRY                                          │
+│ - Current slot                                              │
+│ - Jito tip floor percentiles (min, median, p75, p95)        │
+│ - Recent failure rate (%) & seconds since last success      │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 2. DECISION EVALUATION (LLM Agent / Heuristics)             │
+│ - Anthropic / OpenAI / Gemini / Grok query                  │
+│ - Prompts LLM for optimal tip lamports + concise reasoning  │
+│ - Hard bounds clamping (Floor: 1,000, Ceiling: 5,000,000)   │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 3. OUTPUT EXECUTION ACTION                                  │
+│ - Recommended tip (in lamports)                             │
+│ - Action decision (bundle submission vs standard RPC)       │
+│ - Autonomous recovery action on failure                     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
+### Current AI Implementation Details:
+
+1. **Dynamic Tip Recommendation (`vortex::agent::decisions::decide_tip`)**:
+   Passes live `NetworkState` to the configured LLM provider. The agent returns a JSON payload with `recommended_lamports`, `reasoning`, and `confidence`. To prevent LLM hallucination or overspending, the result is programmatically clamped between a hard floor (1,000 lamports) and a hard ceiling (5,000,000 lamports, or `tip_max` if failure rate exceeds 50%).
+2. **Failure Analysis (`vortex::agent::decisions::analyze_failure`)**:
+   When a transaction fails, raw RPC error strings are passed to the model to classify the cause and recommend a recovery strategy (`refresh_blockhash`, `increase_tip`, `wait`, `abort_insufficient_funds`, or `give_up`).
+3. **Fallback Logic (`vortex::agent::decisions::fallback_tip`)**:
+   If the AI provider times out, returns malformed output, or API keys are absent, Vortex falls back seamlessly to clamped Jito tip floor medians without halting transaction flow.
+4. **Status**: Tip decision and error classification are active in the codebase; autonomous LLM re-submission loops in daemon mode represent an experimental prototype.
+
 ---
 
-## 🛠 Prerequisites
+## 🏗 Architecture
 
-To run what I've built, you'll need:
+```mermaid
+flowchart TD
+    Client["Client / Frontend Dashboard"] -- "POST /api/relay" --> Core["Vortex Core Relayer (Axum / Daemon)"]
+    
+    subgraph Telemetry ["Telemetry & Network Signals"]
+        Geyser["Yellowstone Geyser Stream (gRPC)"] -- "Live Slots & Tx Confirmations" --> Core
+        RPC_Poll["RPC Slot Poller (Fallback)"] -- "400ms Slot Interval" --> Core
+        Jito_Floor["Jito Tip Floor API"] -- "25th/50th/75th/95th Percentiles" --> Core
+    end
+    
+    subgraph Decision ["AI & Routing Layer"]
+        Core -- "Aggregated NetworkState" --> Agent["Multi-Model AI Agent\n(Claude / GPT / Gemini / Grok)"]
+        Agent -- "Tip Lamports + Reasoning" --> Core
+        Core -- "Bounds Clamping & Validation" --> Core
+    end
+    
+    subgraph Execution ["Dual-Path Execution"]
+        Core -- "Construct & Sign Bundle" --> DualSend["Dual-Send Dispatcher"]
+        DualSend -- "Primary (Jito Searcher gRPC)" --> JitoBE["Jito Block Engine"]
+        DualSend -- "Redundant Broadcast (RPC)" --> StandardRPC["Solana RPC Node"]
+    end
+    
+    subgraph Tracking ["Lifecycle & Recovery"]
+        Geyser -- "Zero-Latency Confirmation" --> Log["Lifecycle Logger (logs/lifecycle.json)"]
+        Core -- "Captured Error String" --> Classifier["Failure Classifier & AI Recovery"]
+        Classifier -- "Fresh Blockhash / Escalated Tip" --> Core
+    end
+```
 
-- **Rust** (Edition 2021)
-- **Node.js** (v18+) & **npm/pnpm**
-- **Solana CLI** (`v1.18.x`)
+For an in-depth breakdown of engineering decisions, Protobuf compilation choices, and telemetry mechanics, read [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ---
 
-## 🚀 Getting Started
+## 💻 Tech Stack
 
-### 1. Environment Setup
+- **Language & Runtime:** Rust (2021 Edition), Tokio async runtime
+- **Solana SDK:** `solana-sdk v1.18`, `solana-client v1.18`
+- **Telemetry & Streaming:** Yellowstone Geyser gRPC (`yellowstone-grpc-client v1.15`), Solana HTTP RPC
+- **Block Engine Integration:** Jito gRPC Searcher Engine (`tonic v0.10`, `prost v0.12` compiled via custom `build.rs`)
+- **HTTP Server:** Axum (`axum v0.8`), Tower-HTTP CORS
+- **AI Integrations:** Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok (via `reqwest`)
+- **Frontend Dashboard:** React 19, Vite, TypeScript, Tailwind CSS, Lucide React
 
-Clone my repository and prep the environment variables:
+---
+
+## 🚀 Quick Start & Local Demo
+
+Vortex supports both an **API Mode** (HTTP relayer + React dashboard) and a **Daemon Mode** (autonomous evaluation loop).
+
+### Prerequisites
+
+- **Rust** (`cargo` 1.75+)
+- **Node.js** (v18+) & `npm`
+- **Solana CLI** (optional, for local keypairs)
+
+### 1. Environment Configuration
+
+Clone the repository and set up environment variables:
 
 ```bash
 git clone https://github.com/Don-Vicks/solana-tx-stack.git
@@ -99,28 +149,37 @@ cd solana-tx-stack
 cp .env.example .env
 ```
 
-**Required `.env` Variables:**
+Configure `.env` with your RPC details and preferred AI provider key:
 
-- `SOLANA_RPC_URL`: Your standard HTTP RPC (e.g., Helius, Quicknode).
-- `YELLOWSTONE_GRPC_URL` & `YELLOWSTONE_GRPC_TOKEN`: Required for the Geyser streaming.
-- `AI_PROVIDER`: Choose `anthropic`, `openai`, `gemini`, or `grok`.
-- `[PROVIDER]_API_KEY`: API key for your chosen AI.
-- `WALLET_KEYPAIR_PATH`: Path to your Solana local keypair.
+```env
+SOLANA_RPC_URL="https://api.devnet.solana.com"
+JITO_BLOCK_ENGINE_URL="https://mainnet.block-engine.jito.wtf"
+LOG_FILE_PATH="./logs/lifecycle.json"
 
-### 2. Running the Backend Engine
+# AI Agent Configuration
+AI_PROVIDER="anthropic" # Options: anthropic, openai, gemini, grok
+AI_MODEL="claude-3-5-sonnet-20241022"
+CLAUDE_API_KEY="sk-ant-..."
 
-I designed the backend to run in two modes. For testing the frontend, run it in **API Mode**.
-
-```bash
-cargo build --release
-cargo run --release
+# Wallet Path (Must exist with SOL balance for live transactions)
+WALLET_KEYPAIR_PATH="./keypair.json"
 ```
 
-_(If you want to watch my engine run autonomously in the background, set `RUN_DAEMON=true` in your `.env`)_
+> **Note:** If no AI key is provided, Vortex gracefully falls back to deterministic tip floor medians.
 
-### 3. Running the Frontend Dashboard
+### 2. Run the Backend (API Mode)
 
-In a new terminal window, start the React dashboard I built to visualize the engine in real-time.
+Start the HTTP relayer on `http://localhost:3000`:
+
+```bash
+cargo run --package core
+```
+
+*(To run the autonomous daemon loop instead, set `RUN_DAEMON=true` in your `.env` before running).*
+
+### 3. Run the Frontend Dashboard
+
+In a second terminal, launch the live tracking dashboard:
 
 ```bash
 cd frontend
@@ -128,23 +187,28 @@ npm install
 npm run dev
 ```
 
-Visit `http://localhost:5173`. You can use the **Vortex Transaction Sender** widget to execute real SOL transfers and watch the engine take over.
+Open `http://localhost:5173` in your browser.
+
+### 4. Safe Local Testing
+
+To test the full execution flow safely:
+1. Ensure your `.env` points to `SOLANA_RPC_URL="https://api.devnet.solana.com"`.
+2. Generate a test keypair at `./keypair.json` using `solana-keygen new -o keypair.json` and request a devnet airdrop (`solana airdrop 2 keypair.json --url devnet`).
+3. Use the **Vortex Transaction Sender** widget on the dashboard to send a test transfer (e.g. 0.01 SOL).
+4. Watch the dashboard stream live submission state, AI tip reasoning, and confirmation status.
 
 ---
 
-## 📦 Using My `crates.io` Package
+## 📦 Using `solana-vortex` as a Library
 
-I didn't just build a standalone script; I decoupled the core engine and published it as a modular library on `crates.io` so you can use my infrastructure in your own projects. 
+The core engine is published as a modular Rust crate. You can integrate `solana-vortex` directly into your Rust bots or relayers:
 
-*Note: The repository you are currently looking at is mainly the demo. For a full working example of how to implement the package, you can view the reference demo repo here: [solana-vortex-demo](https://github.com/Don-Vicks/solana-vortex-demo).*
-
-Add `solana-vortex` to your `Cargo.toml`:
-
-```bash
-cargo add solana-vortex
+```toml
+[dependencies]
+solana-vortex = "0.1.3"
 ```
 
-You can initialize my network state evaluator and prompt the AI Agent to decide the optimal tip for your bundle before submission:
+### Example Usage:
 
 ```rust
 use vortex::agent::{AgentConfig, AiProvider, NetworkState, decisions};
@@ -156,7 +220,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         model: "claude-3-5-sonnet-20241022".to_string(),
     };
 
-    // Supplying Live Network Conditions
     let network_state = NetworkState {
         current_slot: 284_900_100,
         tip_min: 10_000,
@@ -178,18 +241,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ---
 
-## 🏆 Bounty Requirements & Mechanics
+## 🎬 Recommended 60–90 Second Demo Flow
 
-Here are my thoughts on the specific bounty questions based on what I learned while building this:
+When recording or evaluating a video demonstration of Vortex, follow this sequence:
 
-### 1. What does the delta between `processed_at` and `confirmed_at` tell me about network health?
+1. **Start Backend & Dashboard (0:00 - 0:15)**: Show terminal starting `cargo run --package core` (relayer listening on port 3000) and `npm run dev` launching the Vite frontend.
+2. **Dashboard Overview (0:15 - 0:30)**: Highlight the live telemetry panel, transaction counter, and event log table.
+3. **Execute Transaction (0:30 - 0:50)**: Submit a transfer using the **Vortex Transaction Sender** widget. Show the HTTP request triggering the AI agent evaluation.
+4. **Inspect AI Decision (0:50 - 1:10)**: Point out the AI reasoning string, recommended tip amount, and bounds clamping.
+5. **Verify On-Chain Landing (1:10 - 1:30)**: Click the Solana Explorer signature link to verify transaction confirmation and Jito tip instruction execution on-chain.
 
-Basically, it tells me how fast the cluster is reaching consensus. When the delta is super low (like 400-800ms), it means the network is running smoothly, meaning validators are voting fast and there's no congestion. When that delta spikes, it usually means the network is struggling with heavy fork switching or high CPU load, and blocks are taking longer to get voted on.
+---
 
-### 2. Why did I avoid using finalized commitment when fetching a blockhash?
+## 📄 License
 
-Because it wastes way too much time. A blockhash is only good for about 150 slots (roughly a minute). If I wait for a blockhash to hit `finalized` status, I'm burning about 32 slots just waiting for confirmation blocks to pile up on top of it. That's basically 25-30% of the blockhash's lifespan gone before I even sign the transaction. For anything time-sensitive, I always grab a `processed` or `confirmed` blockhash to give my bundle the biggest possible window to land before it expires.
-
-### 3. What happens to my bundle if the Jito leader skips their slot?
-
-If the Jito leader I targeted skips their slot, the Jito Block Engine just drops the bundle for that slot. Technically Jito might try to forward it if the blockhash is still alive, but I don't like leaving that to chance. The best way I found to handle this (and how I built the Vortex daemon to work) is to watch the Geyser stream like a hawk. The second I see a `LeaderSkipped` or `Timeout`, I have my engine pull a fresh blockhash, recalculate the tip, and immediately fire a retry at the next Jito leader.
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).

@@ -1,58 +1,59 @@
-# 🏛 Vortex: My Architecture & Engineering Journey
+# 🏛 Vortex Architecture & System Design
 
-When I first saw the requirements for the Solana Smart Transaction Infrastructure Bounty, I'll be honest, I was completely blank. I knew that getting a transaction to land during network congestion was a brutal experience, but I had no immediate idea how to actually solve it at the bare-metal level. 
+This document details the architectural design, technical decisions, and component implementations of **Vortex**, a Solana transaction execution stack.
 
-It was only after diving deep into research, studying exactly why the traditional "spray and pray" approach fails, reading about TPU bottlenecks, and analyzing Jito's gRPC architecture, that the path forward became clear. This document outlines that research journey, how I approached the prompt, the engineering roadblocks I hit along the way, and the architecture I ultimately designed for **Vortex** to fulfill the bounty requirements.
+---
 
-## 1. The Core Problems I Needed to Solve
+## 1. Core Technical Challenges
 
-Before writing any code, I identified three massive bottlenecks in standard Solana development:
-1. **The Latency Problem:** Continuously polling `getSignatureStatuses` over HTTP to check if a transaction landed is incredibly slow and subjects you to severe rate limits. 
-2. **The Tipping Problem:** Hardcoding tips or using basic percentiles meant I was either vastly overpaying during quiet periods or completely failing to land during MEV spikes.
-3. **The Dropped Transaction Problem:** Even when I used Jito's public `sendBundle` REST API to guarantee execution, my bundles were frequently dropped during high load because I was an unauthenticated searcher fighting HTTP bottlenecks.
+Standard transaction submission on Solana faces three main bottlenecks during network congestion:
 
-## 2. High-Level Architecture Flow
+1. **Confirmation Latency:** Polling `getSignatureStatuses` over HTTP RPC introduces polling overhead and subjects clients to RPC rate limits.
+2. **Static Tip Pricing:** Hardcoded priority fees or static Jito tips fail to adapt dynamically during MEV spikes, leading to dropped bundles or excessive tip expenditure.
+3. **Single-Path Execution Failures:** Relying solely on unauthenticated HTTP bundle submission can lead to silent drops during high-load slots when validators switch or skip slots.
 
-Here is the system I designed to solve those exact problems:
+---
+
+## 2. High-Level Architecture
 
 ```mermaid
-graph TD
+flowchart TD
     %% External Services
     Geyser["Yellowstone Geyser Stream (gRPC)"]
-    RPC["Solana Standard RPC (Premium fallback)"]
+    RPC["Solana Standard RPC"]
     Jito["Jito Block Engine (gRPC)"]
-    Agent["Multi-Model AI Agent (Anthropic, OpenAI, Gemini, Grok)"]
+    Agent["Multi-Model AI Agent (Claude, GPT, Gemini, Grok)"]
     
-    subgraph Vortex ["🔥 Vortex Stack (What I Built)"]
-        Core["Vortex Core Coordinator"]
-        Leader["Jito Leader Window Predictor"]
+    subgraph Vortex ["🔥 Vortex Stack Component Boundaries"]
+        Core["Vortex Core Coordinator (Axum / Relayer)"]
+        Leader["Leader Window Evaluator"]
         Failure["Failure Classifier & Auto-Recovery"]
         Bundler["Dual-Send Transaction Bundler"]
-        Logger["Precision Lifecycle Logger"]
+        Logger["Lifecycle Logger"]
     end
     
-    %% The Journey
-    Geyser -- "1. Streams live Slots & TPU events" --> Core
-    RPC -- "2. Polling Fallback & Tip Stats" --> Core
+    %% Flow Steps
+    Geyser -- "1. Streams live Slots & TPU confirmations" --> Core
+    RPC -- "2. RPC Slot Polling Fallback & Tip Floors" --> Core
     
-    Core -- "3. Tracks epoch to predict leaders" --> Leader
-    Core -- "4. Sends network telemetry for tip decision" --> Agent
-    Agent -- "5. AI calculates exact tip & returns reasoning" --> Core
+    Core -- "3. Evaluates upcoming slot leaders" --> Leader
+    Core -- "4. Sends NetworkState telemetry" --> Agent
+    Agent -- "5. Returns recommended tip lamports & reasoning" --> Core
     
-    Core -- "6. Constructs & signs bundle" --> Bundler
-    Bundler -- "7a. Native gRPC Submit (Primary)" --> Jito
-    Bundler -- "7b. Redundant Broadcast (Fallback)" --> RPC
-    Jito -- "8. Broadcasts to Validators" --> RPC
+    Core -- "6. Signs versioned transaction/bundle" --> Bundler
+    Bundler -- "7a. Searcher gRPC Submit (Primary)" --> Jito
+    Bundler -- "7b. Redundant RPC send_transaction (Fallback)" --> RPC
+    Jito -- "8. Relays to MEV-enabled validators" --> RPC
     
-    Geyser -- "9. Zero-latency landing detected" --> Core
-    Core -- "10. Records ms-latency deltas" --> Logger
+    Geyser -- "9. Confirmed event stream" --> Core
+    Core -- "10. Records latency deltas" --> Logger
     
-    Core -- "11. If Blockhash expires/fails" --> Failure
-    Failure -- "12. Triggers AI Retry Loop" --> Core
+    Core -- "11. Captures failed execution" --> Failure
+    Failure -- "12. Executes recovery strategy" --> Core
     
     classDef internal fill:#1f2937,stroke:#3b82f6,stroke-width:2px,color:#fff;
-    classDef external fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff;
-    classDef ai fill:#8b5cf6,stroke:#4c1d95,stroke-width:2px,color:#fff;
+    classDef external fill:#374151,stroke:#9ca3af,stroke-width:2px,color:#fff;
+    classDef ai fill:#4c1d95,stroke:#8b5cf6,stroke-width:2px,color:#fff;
     classDef subgraphStyle fill:#0f172a,stroke:#3b82f6,stroke-width:2px,stroke-dasharray: 5 5,color:#fff;
     
     class Core,Leader,Logger,Failure,Bundler internal;
@@ -61,37 +62,49 @@ graph TD
     class Vortex subgraphStyle;
 ```
 
-## 3. My Thought Process & Component Design
+---
 
-### 3.1 Achieving Zero Latency: The Yellowstone Geyser Stream
-**The Problem:** Waiting for an HTTP RPC to return a transaction status meant I was always seconds behind the actual state of the chain.
-**My Solution:** I completely ripped out HTTP polling for transaction confirmations. Instead, I built a client that opens a persistent WebSocket/gRPC connection to a Yellowstone Geyser-enabled node. 
-**How I handle it:** My daemon subscribes directly to `Processed` block events. The absolute millisecond the slot leader's TPU processes my transaction, Geyser streams that confirmation directly into my application memory. This gives me a true latency delta of ~400-800ms.
+## 3. System Components & Technical Trade-offs
 
-### 3.2 Stopping the Bleed: The Autonomous AI Agent
-**The Problem:** I was losing money on tips. Hardcoded logic just couldn't adapt fast enough to the volatile MEV landscape on Solana.
-**My Solution:** I integrated a multi-model AI Agent interface into the core loop. I designed the system to support any major provider (Anthropic, OpenAI, Gemini, Grok) so I'm never locked into a single model's downtime or rate limits.
-**How I handle it:** Before submitting a transaction, my coordinator aggregates live network telemetry (current slot, tip percentiles, my recent failure rate) and prompts the AI. The AI acts as my dynamic pricing engine, returning a highly confident tip amount in lamports and its reasoning. If my failure rate spikes, the AI autonomously decides to bid higher; if the network is quiet, it rides the floor.
+### 3.1 Telemetry & Confirmation Streaming (Yellowstone Geyser)
 
-### 3.3 Beating the Drops: Native Jito gRPC & Dual-Send
-**The Problem:** I was using Jito's REST API to send bundles, but under high load, they silently dropped my unauthenticated transactions. To fix this, I needed to use Jito's native gRPC Block Engine. However, standard Rust crates for this (`jito-protos`) caused massive dependency hell and conflicted with my `solana-client v1.18.26` requirement.
-**My Solution:** I refused to be blocked by a dependency conflict. I manually downloaded Jito's official Protocol Buffer (`.proto`) schemas into my own `crates/vortex/proto/` folder. I wrote a custom `build.rs` script that natively compiles these schemas directly into Rust gRPC code tailored to my exact environment.
-**How I handle it:** Now, my engine talks directly to Jito's gRPC Block Engine with zero conflict. Furthermore, to guarantee liveness, I engineered a **Dual-Sender Strategy**: every bundle I create is simultaneously blasted to Jito (via gRPC) *and* redundantly fired as a standard transaction to my premium RPC. If Jito skips a slot, my fallback RPC catches the transaction. Zero dropped transactions.
+- **Problem:** HTTP RPC polling introduces 1-2 second latency delays and is prone to HTTP 429 rate-limiting.
+- **Implementation:** Vortex opens a persistent gRPC stream using `yellowstone-grpc-client` to subscribe directly to slot updates and transaction events at `Processed` commitment.
+- **Fallback:** If gRPC endpoint credentials are omitted or connection fails, the engine falls back to an async RPC slot-polling task (`vortex::geyser::rpc_fallback::poll_slots`) operating on a 400ms interval.
 
-### 3.4 Working Smarter: Jito Leader Prediction
-**The Problem:** I realized I was wasting API calls and burning rate limits by firing Jito bundles when a non-Jito validator was leading the slot.
-**My Solution:** I built a predictive Leader Tracker. 
-**How I handle it:** My engine continuously syncs with the Solana epoch leader schedule. By tracking the live slot streaming in from Geyser, Vortex holds my transaction in memory and only fires the bundle when it calculates that a Jito validator is within the upcoming 2-slot window.
+### 3.2 Dynamic Tip Evaluation (Multi-Model AI Agent)
 
-### 3.5 Ephemeral Privacy Routing (Optional)
-**The Problem:** Sometimes I need to route funds or execute trades without deterministic block explorers immediately tracing the flow back to my main wallet.
-**My Solution:** I engineered an ephemeral routing mechanism built directly into my Jito bundles.
-**How I handle it:** When invoked, my code dynamically generates a "burner" keypair entirely in RAM. I construct a bundle that atomically transfers funds from my main wallet to the burner, and then from the burner to the destination. Because this executes atomically within a single Jito block, the burner wallet never technically holds a balance outside of that microsecond, and it is instantly discarded from memory. It effectively breaks standard on-chain tracing.
+- **Problem:** Static tip strategies cannot respond to real-time MEV tip floor surges.
+- **Implementation:** The `vortex::agent` module constructs a `NetworkState` struct containing current slot number, Jito tip floor percentiles (25th, 50th, 75th, 95th), recent local failure rate (%), and seconds elapsed since last successful landing.
+- **Guardrails:** Responses from LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok) are parsed as JSON and strictly clamped to bounds:
+  - **Floor:** 1,000 lamports (prevents zero-tip submissions).
+  - **Ceiling:** 5,000,000 lamports (0.005 SOL) under normal conditions, or `tip_max` when local failure rate > 50%.
+- **Fallback:** If API calls fail or credentials are unavailable, `vortex::agent::decisions::fallback_tip` returns the clamped 50th percentile tip floor.
 
-### 3.6 The `solana-vortex` Package: Open-Sourcing the Solution
-**The Problem:** While solving the bounty requirements (dealing with dropped transactions, HTTP rate limits, and dependency hell with Jito's gRPC crates), I realized the entire Solana developer community struggles with this, yet there was no modular, plug-and-play solution.
-**My Solution:** I decoupled the core engine of my architecture and published it as a modular library on `crates.io` called `solana-vortex`.
-**Why I Did It:** I needed to see others using it because the current ecosystem standard of "spray and pray" is fundamentally broken. By open-sourcing the engine, I wanted to give other developers building MEV bots, DeFi relayers, and automated agents the exact infrastructure I wished I had on day one. I wanted to establish a new standard for smart transaction routing on Solana: one that is autonomous, AI-driven, and relies on real-time data instead of blind guessing.
+### 3.3 Execution Redundancy (Native Jito gRPC & Dual-Send)
 
-## 4. The Result
-By methodically addressing each bottleneck, I architected **Vortex**: a highly resilient, AI-driven infrastructure stack. When failures happen (because on Solana, they always do), my Failure Classifier catches them instantly via Geyser, loops the telemetry back to the AI, and autonomously recovers the transaction before a human could even hit refresh.
+- **Problem:** Protobuf crate dependency version mismatches between official Jito searcher libraries and `solana-client v1.18`.
+- **Implementation:** Jito's official `.proto` schemas were imported directly into `crates/vortex/proto/` and compiled natively during build via `tonic-build` and `prost` in `crates/vortex/build.rs`.
+- **Dual-Send Strategy:** When a transaction is submitted, `vortex::jito::bundle::submit_bundle` simultaneously dispatches the versioned transaction over Jito searcher gRPC (`send_bundle_no_wait`) and redundantly fires it to a standard Solana RPC endpoint. This provides execution redundancy if a Jito leader skips a slot or gRPC delivery fails.
+
+### 3.4 Slot Leader Prediction (`vortex::jito::leader`)
+
+- **Implementation:** The `LeaderTracker` inspects the upcoming 20 slots using `rpc_client.get_slot_leaders`.
+- **Note on Current Prototype:** In the current code layout, `is_jito_validator` acts as a stub function returning `true` for demonstration within test environments. In production, this cross-references live Jito validator directory endpoints.
+
+### 3.5 Failure Classifier & Autonomous Recovery Loop
+
+- **Implementation:** Errors returned during transaction submission or confirmation timeouts are categorized by `vortex::failures::classifier::classify` into failure types (`ExpiredBlockhash`, `FeeTooLow`, `LeaderSkipped`, `ComputeExceeded`, `BundleFailure`, `Unknown`).
+- **Recovery Action:** In daemon mode, `analyze_failure` prompts the AI agent for a corrective action. If `refresh_blockhash` or `increase_tip` is prescribed, Vortex automatically retrieves a fresh blockhash, applies the suggested tip multiplier, and resubmits the transaction.
+
+### 3.6 Ephemeral Private Routing (`vortex::jito::bundle::submit_private_transfer_bundle`)
+
+- **Implementation:** Supports creating an ephemeral "burner" keypair in memory. Constructs a multi-instruction transaction that transfers funds from sender -> ephemeral keypair -> recipient alongside the Jito tip instruction. Because all instructions execute atomically within a single Jito block, funds pass through the ephemeral account in a single transaction without persistent intermediate state.
+
+---
+
+## 4. Summary of System Guarantees
+
+* **Reliability Strategy:** Dual-path execution (Jito gRPC + standard RPC) improves landing probability during validator slot transitions.
+* **Safety Bounds:** Hard programmatic limits prevent the AI layer from recommending unsafe or unbounded tip amounts.
+* **Operational Liveness:** Automatic fallbacks ensure system functionality even if Yellowstone gRPC or AI provider APIs become unavailable.

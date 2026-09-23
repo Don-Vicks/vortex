@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Activity, Clock, Zap, AlertTriangle, CheckCircle2, MoreHorizontal } from 'lucide-react';
 import { useLifecycleLogs } from '../hooks/useLifecycleLogs';
 import type { LifecycleEvent } from '../types/lifecycle';
@@ -68,7 +68,7 @@ function EventRow({ event }: { event: LifecycleEvent }) {
   );
 }
 
-function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
+function InteractiveDemo({ latestEvent: _latestEvent }: { latestEvent?: LifecycleEvent }) {
   const [isSwapping, setIsSwapping] = useState(false);
   const [successSig, setSuccessSig] = useState<string | null>(null);
   const [amount, setAmount] = useState('0.1');
@@ -106,7 +106,7 @@ function InteractiveDemo({ latestEvent }: { latestEvent?: LifecycleEvent }) {
             Vortex Transaction Sender
           </h2>
           <p className="text-sm text-slate-500 max-w-md">
-            Execute a real transfer using the Vortex stack. The backend autonomously evaluates network conditions to set the optimal Jito tip and guarantees landing.
+            Execute a real transfer using the Vortex stack. The backend autonomously evaluates network conditions to calculate the optimal Jito tip and maximize landing probability.
           </p>
         </div>
         
