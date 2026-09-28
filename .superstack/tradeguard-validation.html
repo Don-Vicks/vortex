@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TradeGuard Validation</title>
+<style>
+:root{--bg:#fafaf9;--surface:#fff;--text:#1c1917;--muted:#57534e;--border:#e7e5e4;--accent:#0f766e;--go:#15803d;--warn:#b45309;--stop:#b91c1c;--chip:#f5f5f4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0c0a09;--surface:#1c1917;--text:#f5f5f4;--muted:#a8a29e;--border:#292524;--accent:#2dd4bf;--go:#4ade80;--warn:#fbbf24;--stop:#f87171;--chip:#292524}}
+:root[data-theme="dark"]{--bg:#0c0a09;--surface:#1c1917;--text:#f5f5f4;--muted:#a8a29e;--border:#292524;--accent:#2dd4bf;--go:#4ade80;--warn:#fbbf24;--stop:#f87171;--chip:#292524}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif}
+main{max-width:960px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:40px 0 12px;padding-top:8px;border-top:1px solid var(--border)}h3{font-size:15px;margin:20px 0 6px}
+.sub{color:var(--muted);margin:0 0 24px}
+.verdict{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--warn);border-radius:8px;padding:16px 20px}
+.verdict b.big{font-size:20px;color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px}
+.tile .n{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}.tile .l{color:var(--muted);font-size:13px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}th{color:var(--muted);font-weight:600;font-size:13px}
+tr:last-child td{border-bottom:0}
+.hi{color:var(--stop);font-weight:600}.md{color:var(--warn);font-weight:600}.lo{color:var(--go);font-weight:600}
+.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:1px 9px;font-size:12px;color:var(--muted)}
+ul,ol{padding-left:20px}li{margin:4px 0}
+a{color:var(--accent)}
+.quad{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.quad div{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px}
+.quad h4{margin:0 0 6px;font-size:13px;color:var(--muted)}
+.open{border-color:var(--accent)!important}
+@media (max-width:560px){.quad{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main>
+<h1>TradeGuard Pro: Validation and Competitive Landscape</h1>
+<p class="sub">An MT5 rule-enforcement SaaS running on MetaApi · research date 2026-09-28</p>
+
+<div class="verdict">
+<b class="big">Verdict: PIVOT to a narrow first product (wedge) · confidence 0.5</b>
+<p style="margin:8px 0 0">The problem is real and people pay for it. But the two directions proposed earlier (“prop firm in a box” and “on-chain verified track records”) both run into well-funded incumbents, and one of those is <b>MetaApi itself</b>. Don't build either as the core product. Run a one-week validation sprint on a narrower wedge: <b>rule enforcement plus a mentor dashboard for trading educators and signal communities</b>. That segment is underserved, it's a B2B2C sale, and none of the competitors below target it.</p>
+</div>
+
+<div class="grid">
+<div class="tile"><div class="n">10 / 15</div><div class="l">Scorecard (Go threshold is 8)</div></div>
+<div class="tile"><div class="n">2 / 3</div><div class="l">Demand signal (moderate)</div></div>
+<div class="tile"><div class="n">Crowded</div><div class="l">Prop-firm tooling</div></div>
+<div class="tile"><div class="n">Partial</div><div class="l">Crypto necessity</div></div>
+</div>
+
+<h2>1 · Scorecard</h2>
+<div class="scroll"><table>
+<tr><th>Dimension</th><th>Score</th><th>Why</th></tr>
+<tr><td>Founder fit</td><td>2</td><td>You have a strong Rust/Solana background and the enforcement engine already exists. There's no evidence yet of a network inside the prop-firm or trading-education world.</td></tr>
+<tr><td>MVP speed</td><td>2</td><td>You could ship the wedge in under 2 weeks. A full prop-firm platform (challenges, KYC, CRM, payouts, affiliates) would take months.</td></tr>
+<tr><td>Distribution</td><td>1</td><td>No channel has been identified. Prop firms buy through sales and relationships. Educators could be reached directly on Telegram, Discord and X.</td></tr>
+<tr><td>Market pull</td><td>2</td><td>People pay for this category (see signals below), but none of that demand has been shown for TradeGuard specifically.</td></tr>
+<tr><td>Revenue</td><td>3</td><td>B2B prop tooling sells for $2k–15k/mo. B2C discipline tools sell for about $30/mo.</td></tr>
+</table></div>
+<p>A 10/15 passes the numeric threshold. It fails the pivot-or-persist check, though: the “Go” criteria are met only 2–3 times out of 5, and one “No-Go” trigger fires for the prop-firm-platform version: <i>a well-funded team already shipped a good version.</i></p>
+
+<h2>2 · Demand signals</h2>
+<h3>Strong: people pay money for this category</h3>
+<ul>
+<li><b>White-label prop platforms cost $5k–50k to set up plus $2k–15k/mo, and $1–10 per account</b> (<a href="https://track360.io/blog/white-label-prop-firm-cost-providers-setup-2026">Track360</a>). Prop firms spend real budget on risk engines.</li>
+<li><b>At least two paid B2C “behavioral firewall” products are live</b>: LockMyTrades at $29.99/mo and TradeLock. Traders pay to have their own rules enforced (<a href="https://www.lockmytrades.com/">LockMyTrades</a>, <a href="https://tradeily.com/">TradeLock</a>).</li>
+<li><b>Traders build manual workarounds.</b> There are long-running MQL5 and ForexFactory threads asking how to lock an account after a loss (<a href="https://www.mql5.com/en/forum/380226">MQL5</a>, <a href="https://www.forexfactory.com/thread/563260-lock-metatrader-4-account-after-loss">ForexFactory</a>).</li>
+<li><b>Prop firm crypto payouts reached $115M in Q1 2026, up 129% year on year</b>, and 49% of firms now offer them (<a href="https://propfirmmap.com/blog/best-prop-firms-crypto-payouts-2026-bitcoin-usdt-usdc-withdrawals">PropFirmMap</a>).</li>
+</ul>
+<h3>Missing: evidence for TradeGuard itself</h3>
+<ul><li>No user interviews, waitlist, letters of intent (LOIs) or paying pilots. Per the rubric, the next step is to <b>validate</b>, not to build.</li></ul>
+
+<h2>3 · Competitive landscape</h2>
+<p><b>Crowdedness: crowded</b> for prop-firm platforms, <b>moderate</b> for B2C discipline tools, and <b>sparse</b> for educator/community compliance tooling.</p>
+<div class="scroll"><table>
+<tr><th>Name</th><th>Type</th><th>Status</th><th>Strength</th><th>Weakness</th><th>Threat</th></tr>
+<tr><td><a href="https://metaapi.cloud/docs/risk-management/">MetaApi Risk Management API</a></td><td>Direct competitor that is also your supplier</td><td>Live</td><td>Challenge and drawdown trackers, failure notifications and equity charts, sold directly to prop firms</td><td>An API rather than a product. Doesn't support MT5 netting accounts. No trader-facing UX</td><td class="hi">High</td></tr>
+<tr><td><a href="https://prop-firm.ai/">PropFirmAI</a>, <a href="https://swiset.com/for-prop-firms">Swiset</a>, <a href="https://fxtrusts.com/solutions/prop-firm-software">FXTrusts</a>, FXPropTech, Finxsol</td><td>Direct: white-label prop platforms</td><td>Live</td><td>Turnkey product covering MT5, cTrader and Match-Trader, CRM, KYC and payouts</td><td>Undifferentiated and sold on price. Their risk engines are generic</td><td class="hi">High</td></tr>
+<tr><td><a href="https://www.lockmytrades.com/">LockMyTrades</a></td><td>Direct: B2C discipline</td><td>Live</td><td>Pre-trade blocking, revenge guard, news embargo, $29.99/mo. Works on MT4, MT5, TradeLocker and TradingView</td><td>Solo-trader only. No mentor or community layer</td><td class="md">Medium</td></tr>
+<tr><td><a href="https://tradeily.com/">TradeLock</a></td><td>Direct: B2C discipline</td><td>Live</td><td>Locks the platform on hitting loss, trade-count or losing-streak limits. The 1-hour emergency unlock is a good UX detail</td><td>Same solo-trader focus</td><td class="md">Medium</td></tr>
+<tr><td><a href="https://www.hyrotrader.com/blog/hyro-protocol-on-chain-crypto-prop-trading/">Hyro Protocol</a> (HyroTrader)</td><td>Direct: on-chain prop firm and track records</td><td>Launched Jul 2026, on Solana</td><td>An established prop brand. USDC settlement, verifiable track records</td><td>Crypto trading only, not MT5 forex</td><td class="md">Medium</td></tr>
+<tr><td><a href="https://solanafunded.com/">Solana Funded</a>, Propr, Vanta, DojiFunded, HyperPNL</td><td>Adjacent: on-chain prop firms</td><td>Live</td><td>On-chain payouts anyone can verify</td><td>On-chain crypto trading, not MT5</td><td class="lo">Low</td></tr>
+<tr><td><a href="https://www.riseworks.io/blog/best-payroll-platform-for-prop-firms">Rise</a></td><td>Substitute: payouts</td><td>Live</td><td>$1.5B+ in payout volume, 190+ countries, USDC on Arbitrum. Used by most futures prop firms</td><td>Payouts only. Not on Solana</td><td class="hi">High (for the payout idea)</td></tr>
+<tr><td>Hand-written MQL5 EAs, Myfxbook, spreadsheets</td><td>Non-crypto substitute</td><td>Live</td><td>Free and familiar</td><td>Enforcement happens on each terminal and is easy to disable. Nobody else sees whether rules were followed</td><td class="md">Medium</td></tr>
+</table></div>
+
+<h3>Dead projects and landmines</h3>
+<ul>
+<li><b>80–100 prop firms shut down (13–14% of the industry)</b> after MetaQuotes started revoking MT4/MT5 licenses in Feb 2024. Firms now reportedly need a forex/CFD license plus a bank reference letter to keep MT5 (<a href="https://thepropfirmguide.com/prop-firms-that-shut-down/">PropFirmGuide</a>, <a href="https://www.cointracts.com/learning-hub/why-did-metaquotes-ban-prop-firms-unpacking-the-mt4-and-mt5-crackdown/">Cointracts</a>).</li>
+<li><b>US-facing firms left MetaTrader almost entirely.</b> More than 40 firms, including FTMO, now license DXtrade (<a href="https://thortradecopier.com/blog/dxtrade-vs-mt5-cfd-prop-firms">Thor</a>). A product that only supports MT5 has a shrinking market in the US.</li>
+</ul>
+
+<h3>Positioning map (scope × buyer)</h3>
+<div class="quad">
+<div><h4>Narrow tool · for the trader</h4>LockMyTrades, TradeLock, EAs <span class="chip">moderate</span></div>
+<div><h4>Full platform · for the trader</h4>Myfxbook, journals (Tradezella) <span class="chip">crowded</span></div>
+<div class="open"><h4>Narrow tool · for the educator/community ← OPEN</h4>Nobody is enforcing and reporting rule compliance for cohorts of students or signal followers <span class="chip">sparse</span></div>
+<div><h4>Full platform · for the prop firm</h4>MetaApi, PropFirmAI, Swiset, FXTrusts, Hyro <span class="chip">crowded</span></div>
+</div>
+
+<h3>Moat</h3>
+<p>The most realistic moat is <b>distribution and lock-in</b>: once an educator's cohort, rule templates and history live in TradeGuard, switching costs them effort. A <b>data moat</b> (patterns of behavior across thousands of accounts) builds up slowly on top of that. Technical complexity is <i>not</i> a moat, because MetaApi exposes the same primitives to anyone.</p>
+
+<h2>4 · Crypto necessity: “what breaks without the blockchain?”</h2>
+<ul>
+<li><b>Core enforcement:</b> nothing breaks. Crypto isn't needed here.</li>
+<li><b>Verified track records:</b> they only partly work. The data comes from MT5 through MetaApi, so an on-chain hash proves <i>TradeGuard said so</i>, not that the trades happened. That's an oracle problem: the trust moves to you instead of going away. A signed attestation (for example through the Solana Attestation Service) is still useful for tamper-evidence and portability, but it's a feature, not the product.</li>
+<li><b>USDC payouts on Solana:</b> this is a real improvement over Arbitrum-based Rise for traders in emerging markets, but it's a separate business.</li>
+</ul>
+<p><b>Conclusion:</b> build TradeGuard as a Web2 SaaS. Add Solana for attestations and payouts only once there are paying users who ask for them.</p>
+
+<h2>5 · Risks</h2>
+<div class="scroll"><table>
+<tr><th>Category</th><th>Risk</th><th>Severity</th></tr>
+<tr><td>Market</td><td>MetaApi sells the same risk primitives directly to prop firms and could add a trader-facing UI at any time.</td><td class="hi">High</td></tr>
+<tr><td>Platform</td><td>MetaQuotes license revocations, and the move to DXtrade and cTrader, shrink the market for an MT5-only product.</td><td class="hi">High</td></tr>
+<tr><td>Technical</td><td>Enforcement happens after the trade: MetaApi can close a position but can't block an order before it's placed, so limits can be overshot in fast markets. Competitors advertise pre-trade blocking.</td><td class="md">Medium</td></tr>
+<tr><td>Trust</td><td>Users have to hand over their MT5 master password for TradeGuard to be able to close trades. LockMyTrades markets “no broker credentials needed” against exactly this.</td><td class="md">Medium</td></tr>
+<tr><td>Unit economics</td><td>MetaApi charges per account, so costs grow linearly with users. $10/mo B2C pricing may not cover it.</td><td class="md">Medium</td></tr>
+<tr><td>Regulatory</td><td>Anything that looks like managing funds, PAMM, or staking on outcomes brings regulatory scrutiny.</td><td class="md">Medium</td></tr>
+</table></div>
+
+<h2>6 · Pivot options</h2>
+<ul>
+<li><b>Recommended: narrower first product (wedge pivot).</b> Same engine, sold to <b>trading educators, mentors and signal communities</b>. Rule templates per cohort, a compliance leaderboard, breach alerts in Telegram and Discord, and a mentor dashboard. Priced per seat. The educator sells it to their students for you.</li>
+<li><b>Different user segment (adjacent pivot).</b> A compliance layer for small prop firms that already run on white-label platforms, where TradeGuard's rules are richer than their built-in risk engine. This means a harder sales process.</li>
+<li><b>Different layer (stack pivot).</b> A multi-platform rule engine API covering MT5, cTrader, DXtrade and Match-Trader. This removes the dependency on MetaApi and MetaQuotes.</li>
+</ul>
+
+<h2>7 · Build it yourself or integrate?</h2>
+<ul>
+<li><b>Drawdown and equity tracking:</b> use MetaApi's Risk Management API rather than building your own trackers. Put your own logic only into the rules and the UX.</li>
+<li><b>Attestations (later):</b> use the Solana Attestation Service. No custom program is needed.</li>
+<li><b>Payouts (later):</b> integrate an existing USDC rail. Don't build a custodial payout program.</li>
+</ul>
+
+<h2>8 · One-week validation sprint</h2>
+<ol>
+<li><b>Days 1–2:</b> list 30 trading educators and signal-group owners with more than 1k members (Telegram, Discord, X, YouTube), focusing on markets where MT5 still dominates. DM 20 of them.</li>
+<li><b>Days 2–4:</b> hold 8–10 calls. Ask: <i>“How do you know whether your students follow your risk rules? What happens when they blow accounts?”</i> Don't pitch.</li>
+<li><b>Day 3:</b> put up a landing page with a real price (for example, $99/mo for 25 seats) and a “Start pilot” button.</li>
+<li><b>Days 5–7:</b> offer 3 paid pilots. Also interview 10 funded traders to find out why they would or wouldn't choose TradeGuard over LockMyTrades.</li>
+</ol>
+<p><b>Pass bar:</b> at least 2 paid pilots or signed LOIs, plus at least 5 of 10 educators describing the problem unprompted. <b>Kill bar:</b> no pilots after 20 conversations. If that happens, fall back to the multi-platform rule engine API (stack pivot).</p>
+</main></body></html>

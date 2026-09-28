@@ -72,7 +72,8 @@ pub struct Instruction {
     pub program_id: String,
     pub program_name: Option<String>,
     pub accounts: Vec<String>,
-    /// Base58-encoded instruction data.
+    /// Base64-encoded instruction data (base58 is quadratic in length, and
+    /// Anchor event CPIs carry hundreds of bytes).
     pub data: String,
     /// Instruction name from a built-in decoder or from program logs.
     pub name: Option<String>,

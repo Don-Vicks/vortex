@@ -22,6 +22,7 @@ uuid.workspace = true
 yellowstone-grpc-client = "1.15.0"
 yellowstone-grpc-proto = "1.14.2"
 bs58 = "0.5.1"
+base64 = "0.21"
 tokio-stream = "0.1"
 bincode = "1.3.3"
 tonic = "0.10"

@@ -6,6 +6,7 @@ use crate::events::{
     VortexTransaction,
 };
 use anyhow::{anyhow, Result};
+use base64::Engine;
 use chrono::Utc;
 use solana_sdk::instruction::InstructionError;
 use solana_sdk::transaction::TransactionError;
@@ -175,7 +176,7 @@ fn build_instruction(
             .iter()
             .filter_map(|&i| keys.get(i as usize).map(|s| s.to_string()))
             .collect(),
-        data: bs58::encode(data).into_string(),
+        data: base64::engine::general_purpose::STANDARD.encode(data),
         program_id,
     }
 }
