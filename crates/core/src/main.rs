@@ -77,6 +77,9 @@ async fn main() -> Result<()> {
                         }
                     }
                 }
+                // Program transactions are only streamed when a consumer
+                // (e.g. Sentinel) registers program filters via VortexHub.
+                vortex::geyser::GeyserEvent::Transaction(_) => {}
             }
         }
     });

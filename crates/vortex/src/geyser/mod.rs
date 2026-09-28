@@ -1,4 +1,5 @@
 pub mod client;
+pub mod decode;
 pub mod rpc_fallback;
 pub mod stream;
 
@@ -31,4 +32,6 @@ pub struct TxConfirmation {
 pub enum GeyserEvent {
     Slot(SlotInfo),
     Tx(TxConfirmation),
+    /// Fully decoded transaction matching a program filter.
+    Transaction(std::sync::Arc<crate::events::VortexTransaction>),
 }

@@ -13,7 +13,7 @@ solana-sdk.workspace = true
 solana-client.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["rc"] }
 serde_json.workspace = true
 reqwest.workspace = true
 tracing.workspace = true
@@ -32,3 +32,7 @@ futures-util = "0.3.32"
 
 [build-dependencies]
 tonic-build = "0.10"
+
+[dev-dependencies]
+dotenv = "0.15"
+tracing-subscriber = "0.3"
