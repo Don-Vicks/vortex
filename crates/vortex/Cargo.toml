@@ -30,6 +30,7 @@ prost = "0.12"
 prost-types = "0.12"
 thiserror = "2.0.18"
 futures-util = "0.3.32"
+tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
 
 [build-dependencies]
 tonic-build = "0.10"

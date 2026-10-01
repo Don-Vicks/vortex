@@ -208,7 +208,7 @@ async fn try_subscribe(
     }
 }
 
-async fn forward_transaction(
+pub(crate) async fn forward_transaction(
     sender: &mpsc::Sender<GeyserEvent>,
     tx: SubscribeUpdateTransaction,
     filters: Vec<String>,

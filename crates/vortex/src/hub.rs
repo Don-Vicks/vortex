@@ -23,6 +23,7 @@ pub struct VortexHub {
     last_slot: AtomicU64,
     last_transaction_at: Mutex<Option<DateTime<Utc>>>,
     started_at: DateTime<Utc>,
+    transport: Mutex<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,6 +51,7 @@ impl VortexHub {
             last_slot: AtomicU64::new(0),
             last_transaction_at: Mutex::new(None),
             started_at: Utc::now(),
+            transport: Mutex::new("grpc"),
         })
     }
 
@@ -87,6 +89,15 @@ impl VortexHub {
             f.programs = next;
             true
         });
+    }
+
+    /// Which transport is feeding the stream right now ("grpc" or "mirage").
+    pub fn transport(&self) -> &'static str {
+        *self.transport.lock().unwrap()
+    }
+
+    pub fn set_transport(&self, name: &'static str) {
+        *self.transport.lock().unwrap() = name;
     }
 
     pub fn stats(&self) -> HubStats {

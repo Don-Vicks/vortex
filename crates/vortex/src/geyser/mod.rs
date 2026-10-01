@@ -1,5 +1,6 @@
 pub mod client;
 pub mod decode;
+pub mod mirage;
 pub mod rpc_frame;
 pub mod rpc_fallback;
 pub mod stream;
