@@ -14,6 +14,9 @@ use yellowstone_grpc_proto::prelude::*;
 
 const MAX_RECONNECT_ATTEMPTS: u32 = 10;
 const INITIAL_BACKOFF_MS: u64 = 500;
+/// No message of any kind (slots arrive several times a second) for this long means the
+/// subscription is dead even though the connection is open, so reconnect.
+const STALL_TIMEOUT_SECS: u64 = 30;
 /// A session that stayed up this long counts as healthy and resets the backoff.
 const HEALTHY_SESSION_SECS: u64 = 30;
 
@@ -168,7 +171,10 @@ async fn try_subscribe(
                 info!(programs = ?current.programs, "Updating Geyser filters");
                 sink.send(build_request(&current)).await?;
             }
-            message = stream.next() => {
+            message = tokio::time::timeout(std::time::Duration::from_secs(STALL_TIMEOUT_SECS), stream.next()) => {
+                let message = message.map_err(|_| {
+                    anyhow::anyhow!("no data from Geyser for {STALL_TIMEOUT_SECS}s; the subscription stalled")
+                })?;
                 let Some(message) = message else { return Ok(false) };
                 let msg = message.map_err(|e| {
                     error!(error = %e, "gRPC stream error");
