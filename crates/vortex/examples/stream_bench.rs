@@ -44,18 +44,37 @@ async fn main() -> anyhow::Result<()> {
     }
     let mut client = b.connect().await?;
 
+    let per_program = mode == "rates";
     let mut txs = HashMap::new();
+    if per_program {
+        for (i, p) in programs.iter().enumerate() {
+            txs.insert(
+                format!("p{i}"),
+                SubscribeRequestFilterTransactions {
+                    vote: Some(false),
+                    failed: None,
+                    signature: None,
+                    account_include: vec![p.clone()],
+                    account_exclude: vec![],
+                    account_required: vec![],
+                },
+            );
+        }
+    }
+    if !per_program {
     txs.insert(
         "bench".to_string(),
         SubscribeRequestFilterTransactions {
             vote: Some(false),
             failed: None,
             signature: None,
-            account_include: programs,
+            account_include: programs.clone(),
             account_exclude: vec![],
             account_required: vec![],
         },
     );
+    }
+    let mut counts = vec![0u64; programs.len()];
     let mut slots = HashMap::new();
     slots.insert("s".to_string(), SubscribeRequestFilterSlots { filter_by_commitment: Some(true) });
     let (_sink, mut stream) = client
@@ -96,6 +115,11 @@ async fn main() -> anyhow::Result<()> {
                 biggest = biggest.max(len);
                 match m.update_oneof {
                     Some(subscribe_update::UpdateOneof::Transaction(t)) => {
+                        for f in &m.filters {
+                            if let Some(i) = f.strip_prefix('p').and_then(|n| n.parse::<usize>().ok()) {
+                                counts[i] += 1;
+                            }
+                        }
                         n_tx += 1;
                         newest_slot = newest_slot.max(t.slot);
                     }
@@ -109,6 +133,11 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     let t = start.elapsed().as_secs_f64();
+    if per_program {
+        for (p, c) in programs.iter().zip(&counts) {
+            println!("RATE {p} {:.1}", *c as f64 / t);
+        }
+    }
     // Freshness: how far the newest streamed slot is behind the chain right now.
     let tip = client.get_slot(Some(CommitmentLevel::Processed)).await.map(|r| r.slot).unwrap_or(0);
     let behind = tip.saturating_sub(newest_slot);
